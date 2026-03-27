@@ -1,44 +1,69 @@
-"""发送命令"""
+"""发送相关命令"""
 
 import click
 from rich.console import Console
+from rich.panel import Panel
+from click import group
+
+from news_push.storage.database import DatabaseManager
+from news_push.core.pipeline import PipelineOrchestrator
 
 console = Console()
+send_commands = group()
 
 
-@click.group(name="send")
-def send_commands():
-    """发送新闻推送"""
-    pass
+@send_commands.command("test")
+def test_send():
+    """测试抓取（不发送邮件）"""
+    console.print(Panel.fit("[bold cyan]测试抓取[/bold cyan]"))
+
+    db = DatabaseManager()
+    user_email = _get_user_email(db)
+    if not user_email:
+        console.print("[red]✗ 请先运行 /news init 初始化配置[/red]")
+        return
+
+    orchestrator = PipelineOrchestrator(db)
+    result = orchestrator.run(user_email, dry_run=True)
+
+    if result.get("success"):
+        console.print(f"[green]✅ 测试成功！抓取了 {result['articles_count']} 篇文章[/green]")
+    else:
+        console.print(f"[red]✗ 测试失败: {result.get('error')}[/red]")
 
 
-@send_commands.command(name="run")
-def send_run():
-    """立即执行新闻推送"""
-    console.print("[yellow]功能开发中...[/yellow]")
-    console.print("[dim]此功能将在后续版本实现[/dim]\n")
+@send_commands.command("now")
+def send_now():
+    """立即抓取并发送邮件"""
+    console.print(Panel.fit("[bold cyan]立即发送[/bold cyan]"))
+
+    db = DatabaseManager()
+    user_email = _get_user_email(db)
+    if not user_email:
+        console.print("[red]✗ 请先运行 /news init 初始化配置[/red]")
+        return
+
+    orchestrator = PipelineOrchestrator(db)
+    result = orchestrator.run(user_email, dry_run=False)
+
+    if result.get("success"):
+        console.print(f"[green]✅ 发送成功！发送了 {result['articles_count']} 篇文章[/green]")
+    else:
+        console.print(f"[red]✗ 发送失败: {result.get('error')}[/red]")
 
 
-@send_commands.command(name="preview")
-def send_preview():
-    """预览即将发送的内容"""
-    console.print("[yellow]功能开发中...[/yellow]")
-    console.print("[dim]此功能将在后续版本实现[/dim]\n")
+@send_commands.command("preview")
+def preview_email():
+    """预览邮件内容"""
+    console.print("[yellow]预览邮件功能开发中...[/yellow]")
 
 
-@send_commands.command(name="history")
-@click.option("--limit", default=10, help="显示条数")
-def send_history(limit):
-    """查看发送历史
-
-    LIMIT: 显示条数，默认10条
-    """
-    console.print("[yellow]功能开发中...[/yellow]")
-    console.print("[dim]此功能将在后续版本实现[/dim]\n")
-
-
-@send_commands.command(name="test")
-def send_test():
-    """发送测试邮件"""
-    console.print("[yellow]功能开发中...[/yellow]")
-    console.print("[dim]此功能将在后续版本实现[/dim]\n")
+def _get_user_email(db: DatabaseManager) -> str | None:
+    """获取用户邮箱"""
+    session = db.get_session()
+    try:
+        from news_push.storage.models import User
+        user = session.query(User).first()
+        return user.email if user else None
+    finally:
+        session.close()
