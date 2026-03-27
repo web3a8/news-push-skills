@@ -35,10 +35,10 @@ def cli(ctx):
 cli.add_command(init_command, name="init")
 
 # 添加命令组
-cli.add_command(source_commands)
-cli.add_command(filter_commands)
-cli.add_command(send_commands)
-cli.add_command(cron_commands)
+cli.add_command(source_commands, name="source")
+cli.add_command(filter_commands, name="filter")
+cli.add_command(send_commands, name="send")
+cli.add_command(cron_commands, name="cron")
 
 
 if __name__ == "__main__":

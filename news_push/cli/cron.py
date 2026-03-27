@@ -5,10 +5,14 @@ import click
 from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
-from click import group
 
 console = Console()
-cron_commands = group()
+
+
+@click.group()
+def cron_commands():
+    """Cron 任务管理命令"""
+    pass
 
 
 @cron_commands.command("install")

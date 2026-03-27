@@ -7,12 +7,16 @@ from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
-from click import group
 
 from news_push.storage.database import DatabaseManager
 
 console = Console()
-source_commands = group()
+
+
+@click.group()
+def source_commands():
+    """新闻源管理命令"""
+    pass
 
 
 @source_commands.command("add")

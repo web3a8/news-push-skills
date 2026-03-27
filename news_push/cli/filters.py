@@ -5,12 +5,16 @@ from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
-from click import group
 
 from news_push.storage.database import DatabaseManager
 
 console = Console()
-filter_commands = group()
+
+
+@click.group()
+def filter_commands():
+    """过滤规则管理命令"""
+    pass
 
 
 @filter_commands.command("add")

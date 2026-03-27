@@ -3,13 +3,17 @@
 import click
 from rich.console import Console
 from rich.panel import Panel
-from click import group
 
 from news_push.storage.database import DatabaseManager
 from news_push.core.pipeline import PipelineOrchestrator
 
 console = Console()
-send_commands = group()
+
+
+@click.group()
+def send_commands():
+    """发送相关命令"""
+    pass
 
 
 @send_commands.command("test")
