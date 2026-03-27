@@ -167,8 +167,10 @@ class DatabaseManager:
         Returns:
             文章列表
         """
+        from sqlalchemy.orm import joinedload
+
         session = self.get_session()
-        query = session.query(Article)
+        query = session.query(Article).options(joinedload(Article.source))
 
         if source_id:
             query = query.filter(Article.source_id == source_id)
