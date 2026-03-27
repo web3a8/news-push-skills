@@ -16,11 +16,11 @@ def create_app():
     app.config["SECRET_KEY"] = "dev-secret-key-change-in-production"
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max
 
-    # 注册蓝图（稍后添加）
-    # from news_push.web.routes import home_bp, sources_bp, articles_bp, settings_bp
-    # app.register_blueprint(home_bp)
-    # app.register_blueprint(sources_bp)
-    # app.register_blueprint(articles_bp)
-    # app.register_blueprint(settings_bp)
+    # 注册蓝图
+    from news_push.web.routes import home_bp, sources_bp, articles_bp, settings_bp
+    app.register_blueprint(home_bp)
+    app.register_blueprint(sources_bp)
+    app.register_blueprint(articles_bp)
+    app.register_blueprint(settings_bp)
 
     return app
