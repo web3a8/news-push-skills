@@ -55,7 +55,28 @@ news-push source add https://www.zhihu.com/api/v3/feed/topstory/hot-list-web
 news-push send test
 ```
 
-### 5. 查看新闻源
+### 5. 启动 Web UI（可选）
+
+```bash
+news-push web
+```
+
+访问 http://localhost:5000 使用 Web 管理界面。
+
+**Web UI 功能：**
+- 📊 查看统计信息
+- 📡 管理新闻源（添加、编辑、删除）
+- 📰 浏览文章列表（支持筛选、分页）
+- ⚙️ 配置系统设置
+
+**可选参数：**
+```bash
+news-push web --port 8080           # 自定义端口
+news-push web --host 0.0.0.0        # 允许外部访问
+news-push web --debug               # 开发模式
+```
+
+### 6. 查看新闻源
 
 ```bash
 news-push source list
@@ -170,6 +191,9 @@ LOG_LEVEL=INFO
 - [ ] 过滤器 CLI 命令
 - [ ] Cron 任务管理
 - [ ] AI 摘要功能集成
+
+### ✅ 已实现
+- [x] Web UI 管理界面（Flask）
 
 ### 📋 计划中
 - [ ] 更多邮件主题
