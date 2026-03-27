@@ -2,8 +2,8 @@
 
 import os
 from datetime import datetime, timedelta
-from typing import Optional
-from sqlalchemy import create_engine
+from typing import Optional, List
+from sqlalchemy import create_engine, desc
 from sqlalchemy.orm import sessionmaker, Session
 from news_push.storage.models import Base, User, Source, Filter, Article, SentHistory
 from news_push.storage.security import SecureStorage
@@ -153,3 +153,29 @@ class DatabaseManager:
             raise
         finally:
             session.close()
+
+    def get_articles(self, limit: int = 20, offset: int = 0,
+                     source_id: Optional[int] = None) -> List[Article]:
+        """
+        获取文章列表，支持分页和筛选
+
+        Args:
+            limit: 每页数量
+            offset: 偏移量
+            source_id: 来源ID筛选（可选）
+
+        Returns:
+            文章列表
+        """
+        session = self.get_session()
+        query = session.query(Article)
+
+        if source_id:
+            query = query.filter(Article.source_id == source_id)
+
+        articles = query.order_by(desc(Article.fetched_at))\
+                        .offset(offset)\
+                        .limit(limit)\
+                        .all()
+        session.close()
+        return articles

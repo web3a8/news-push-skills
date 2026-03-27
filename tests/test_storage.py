@@ -169,3 +169,69 @@ def test_database_get_nonexistent_user(db_manager: DatabaseManager):
     """测试获取不存在的用户"""
     user = db_manager.get_user("nonexistent@example.com")
     assert user is None
+
+
+def test_get_articles_with_pagination():
+    """测试获取文章列表（分页）"""
+    from datetime import datetime
+
+    # 设置加密密钥
+    original_key = os.environ.get("NEWS_PUSH_ENCRYPTION_KEY")
+    test_key = SecureStorage.generate_key()
+    os.environ["NEWS_PUSH_ENCRYPTION_KEY"] = test_key
+
+    try:
+        db = DatabaseManager(":memory:")
+        db.create_tables()
+
+        # 创建测试数据（直接使用session）
+        session = db.get_session()
+
+        user = User(
+            email="test@example.com",
+            smtp_host="smtp.example.com",
+            smtp_port=587,
+            smtp_username="user",
+            smtp_password="encrypted_pass"
+        )
+        session.add(user)
+        session.flush()  # Flush to get user.id
+
+        source = Source(
+            user_id=user.id,
+            name="Test Source",
+            url="https://example.com/feed",
+            type="rss",
+            fetch_interval=60
+        )
+        session.add(source)
+        session.commit()
+
+        # 创建 25 篇文章
+        for i in range(25):
+            article = Article(
+                url=f"https://example.com/article-{i}",
+                title=f"Article {i}",
+                content=f"Content {i}",
+                source_id=source.id,
+                fetched_at=datetime.now()
+            )
+            session.add(article)
+        session.commit()
+        session.close()
+
+        # 测试分页
+        articles_page1 = db.get_articles(limit=20, offset=0)
+        assert len(articles_page1) == 20
+
+        articles_page2 = db.get_articles(limit=20, offset=20)
+        assert len(articles_page2) == 5
+
+        # 测试排序（按时间倒序）
+        assert articles_page1[0].fetched_at >= articles_page1[-1].fetched_at
+    finally:
+        # 恢复原始环境变量
+        if original_key is not None:
+            os.environ["NEWS_PUSH_ENCRYPTION_KEY"] = original_key
+        else:
+            os.environ.pop("NEWS_PUSH_ENCRYPTION_KEY", None)
