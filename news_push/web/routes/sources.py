@@ -75,12 +75,6 @@ def add_source():
     return render_template("sources/form.html")
 
 
-@sources_bp.route("/sources/add", methods=["GET", "POST"])
-def add_source():
-    """添加新闻源"""
-    return "添加新闻源 - 待实现"
-
-
 @sources_bp.route("/sources/<int:source_id>/edit", methods=["GET", "POST"])
 def edit_source(source_id):
     """编辑新闻源"""

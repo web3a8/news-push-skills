@@ -202,6 +202,18 @@ class DatabaseManager:
         session.close()
         return stats
 
+    def get_sources(self) -> List[Source]:
+        """
+        获取所有新闻源
+
+        Returns:
+            新闻源列表
+        """
+        session = self.get_session()
+        sources = session.query(Source).all()
+        session.close()
+        return sources
+
     def get_source_by_id(self, source_id: int):
         """
         根据 ID 获取新闻源
