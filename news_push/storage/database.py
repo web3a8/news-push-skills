@@ -258,3 +258,18 @@ class DatabaseManager:
             session.commit()
 
         session.close()
+
+    def get_article_by_id(self, article_id: int):
+        """
+        根据 ID 获取文章
+
+        Args:
+            article_id: 文章 ID
+
+        Returns:
+            文章对象，如果不存在返回 None
+        """
+        session = self.get_session()
+        article = session.query(Article).filter(Article.id == article_id).first()
+        session.close()
+        return article
