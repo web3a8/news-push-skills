@@ -3,72 +3,119 @@
 {% block title %}首页 - News Push{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h2>欢迎使用 News Push</h2>
-    <p>自动获取新闻热点并推送到邮箱</p>
-</div>
+<!-- Dashboard Header & Stats -->
+<section class="mb-10">
+    <h1 class="font-headline text-4xl font-bold mb-8 text-on-primary-container tracking-tight">新闻仪表盘</h1>
 
-<div class="stats-grid">
-    <div class="card">
-        <h3>📡 新闻源</h3>
-        <p class="stat-number">{{ stats.sources_count }}</p>
-    </div>
-
-    <div class="card">
-        <h3>📰 今日文章</h3>
-        <p class="stat-number">{{ stats.today_articles }}</p>
-    </div>
-
-    <div class="card">
-        <h3>📚 总文章数</h3>
-        <p class="stat-number">{{ stats.total_articles }}</p>
-    </div>
-</div>
-
-<div class="quick-actions">
-    <a href="{{ url_for('sources.add_source') }}" class="btn btn-primary">添加新闻源</a>
-    <a href="{{ url_for('sources.list_sources') }}" class="btn">管理新闻源</a>
-</div>
-
-{% if sources %}
-<div class="filter-bar">
-    <strong>筛选：</strong>
-    <a href="/" class="btn {% if not current_source_id %}btn-primary{% endif %}">全部</a>
-    {% for source in sources %}
-    <a href="/?source_id={{ source.id }}" class="btn {% if current_source_id == source.id %}btn-primary{% endif %}">{{ source.name }}</a>
-    {% endfor %}
-</div>
-{% endif %}
-
-{% if articles %}
-<div class="articles-list">
-    {% for article in articles %}
-    <div class="card article-item">
-        <h3><a href="{{ url_for('articles.article_detail', article_id=article.id) }}">{{ article.title }}</a></h3>
-        <div class="article-meta">
-            <span class="source-tag">{{ article.source.name if article.source else '未知来源' }}</span>
-            <span class="article-time">{{ article.published_at.strftime('%Y-%m-%d %H:%M') if article.published_at else article.fetched_at.strftime('%Y-%m-%d %H:%M') }}</span>
+    <!-- Bento Stats Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div class="bg-surface-bright/10 backdrop-blur-md p-6 rounded-xl border-none shadow-[0_8px_32px_0_rgba(6,14,32,0.37)] flex flex-col justify-between">
+            <span class="text-secondary text-sm font-label uppercase tracking-widest">News Sources</span>
+            <div class="mt-4 flex items-baseline gap-2">
+                <span class="text-5xl font-headline font-bold text-primary">{{ stats.sources_count }}</span>
+                <span class="text-on-surface-variant text-sm">新闻源</span>
+            </div>
         </div>
-        {% if article.summary %}
-        <p class="article-summary">{{ article.summary[:150] }}...</p>
-        {% elif article.content %}
-        <p class="article-summary">{{ article.content[:150] }}...</p>
-        {% endif %}
-        <a href="{{ article.url }}" target="_blank" class="btn">打开原文 ↗</a>
-    </div>
-    {% endfor %}
-</div>
 
-<div class="pagination">
-    {% if page > 1 %}
-    <a href="/?page={{ page - 1 }}{% if current_source_id %}&source_id={{ current_source_id }}{% endif %}" class="btn">上一页</a>
+        <div class="bg-surface-bright/10 backdrop-blur-md p-6 rounded-xl border-none shadow-[0_8px_32px_0_rgba(6,14,32,0.37)] flex flex-col justify-between">
+            <span class="text-secondary text-sm font-label uppercase tracking-widest text-[#89ceff]">Today's Articles</span>
+            <div class="mt-4 flex items-baseline gap-2">
+                <span class="text-5xl font-headline font-bold text-[#89ceff]">{{ stats.today_articles }}</span>
+                <span class="text-on-surface-variant text-sm">今日文章</span>
+            </div>
+        </div>
+
+        <div class="bg-surface-bright/10 backdrop-blur-md p-6 rounded-xl border-none shadow-[0_8px_32px_0_rgba(6,14,32,0.37)] flex flex-col justify-between">
+            <span class="text-secondary text-sm font-label uppercase tracking-widest">Total Articles</span>
+            <div class="mt-4 flex items-baseline gap-2">
+                <span class="text-5xl font-headline font-bold text-on-primary-container">{{ stats.total_articles }}</span>
+                <span class="text-on-surface-variant text-sm">总文章数</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="flex flex-wrap gap-3 items-center mb-6">
+        <a href="{{ url_for('sources.add_source') }}" class="px-6 py-2 rounded-full bg-primary-container text-on-primary-container font-medium text-sm transition-all active:scale-95 flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">add</span>
+            添加新闻源
+        </a>
+        <a href="{{ url_for('sources.list_sources') }}" class="px-6 py-2 rounded-full bg-surface-container-high text-secondary hover:bg-surface-container-highest transition-all duration-300 text-sm font-medium flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">settings</span>
+            管理新闻源
+        </a>
+    </div>
+
+    <!-- Filters -->
+    {% if sources %}
+    <div class="flex flex-wrap gap-3 items-center">
+        <a href="/" class="px-6 py-2 rounded-full {% if not current_source_id %}bg-primary-container text-on-primary-container{% else %}bg-surface-container-high text-secondary hover:bg-surface-container-highest{% endif %} transition-all duration-300 text-sm font-medium">全部</a>
+        {% for source in sources %}
+        <a href="/?source_id={{ source.id }}" class="px-6 py-2 rounded-full {% if current_source_id == source.id %}bg-primary-container text-on-primary-container{% else %}bg-surface-container-high text-secondary hover:bg-surface-container-highest{% endif %} transition-all duration-300 text-sm font-medium">{{ source.name }}</a>
+        {% endfor %}
+    </div>
     {% endif %}
-    <span>第 {{ page }} 页</span>
-    <a href="/?page={{ page + 1 }}{% if current_source_id %}&source_id={{ current_source_id }}{% endif %}" class="btn">下一页</a>
+</section>
+
+<!-- Compact News Feed -->
+{% if articles %}
+<section class="space-y-4">
+    {% for article in articles %}
+    <article class="group bg-surface-container-low hover:bg-surface-container transition-all duration-300 p-5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4 border-transparent hover:border-primary-container">
+        <div class="flex-1 space-y-2">
+            <div class="flex items-center gap-3 text-xs font-label">
+                <span class="text-primary font-semibold tracking-wide uppercase">{{ article.source.name if article.source else '未知来源' }}</span>
+                <span class="text-outline">•</span>
+                <span class="text-on-surface-variant">
+                    {% if article.published_at %}
+                        {{ article.published_at.strftime('%Y-%m-%d %H:%M') }}
+                    {% else %}
+                        {{ article.fetched_at.strftime('%Y-%m-%d %H:%M') }}
+                    {% endif %}
+                </span>
+            </div>
+            <h2 class="font-headline text-xl font-bold text-primary group-hover:text-on-primary-container transition-colors leading-tight">
+                <a href="{{ url_for('articles.article_detail', article_id=article.id) }}">{{ article.title }}</a>
+            </h2>
+            {% if article.summary or article.content %}
+            <p class="text-on-surface-variant text-sm line-clamp-2 max-w-3xl leading-relaxed">
+                {{ (article.summary or article.content)[:150] }}...
+            </p>
+            {% endif %}
+        </div>
+        <div class="flex items-center gap-4 shrink-0">
+            <a href="{{ article.url }}" target="_blank" class="flex items-center gap-2 px-4 py-2 bg-surface-container-highest text-primary font-medium text-sm rounded-lg hover:bg-primary-container hover:text-on-primary-container transition-all active:scale-95 group/btn">
+                打开原文
+                <span class="material-symbols-outlined text-sm group-hover/btn:translate-x-1 transition-transform">arrow_outward</span>
+            </a>
+        </div>
+    </article>
+    {% endfor %}
+</section>
+
+<!-- Pagination -->
+<div class="mt-12 flex justify-center items-center gap-4">
+    {% if page > 1 %}
+    <a href="/?page={{ page - 1 }}{% if current_source_id %}&source_id={{ current_source_id }}{% endif %}" class="flex items-center gap-2 px-6 py-2 bg-surface-container text-on-surface font-medium rounded-full hover:bg-surface-container-highest transition-all duration-300">
+        <span class="material-symbols-outlined text-sm">chevron_left</span>
+        上一页
+    </a>
+    {% endif %}
+    <span class="text-on-surface-variant text-sm">第 {{ page }} 页</span>
+    <a href="/?page={{ page + 1 }}{% if current_source_id %}&source_id={{ current_source_id }}{% endif %}" class="flex items-center gap-2 px-6 py-2 bg-surface-container text-on-surface font-medium rounded-full hover:bg-surface-container-highest transition-all duration-300">
+        下一页
+        <span class="material-symbols-outlined text-sm">chevron_right</span>
+    </a>
 </div>
 {% else %}
-<div class="card">
-    <p>暂无文章，<a href="{{ url_for('sources.add_source') }}">添加新闻源</a>开始获取新闻吧！</p>
+<div class="bg-surface-container-low p-12 rounded-xl text-center">
+    <div class="text-6xl mb-4">📰</div>
+    <h3 class="font-headline text-2xl font-bold text-primary mb-2">暂无文章</h3>
+    <p class="text-on-surface-variant mb-6">添加新闻源开始获取新闻吧！</p>
+    <a href="{{ url_for('sources.add_source') }}" class="inline-flex items-center gap-2 px-6 py-3 bg-primary-container text-on-primary-container font-medium rounded-full hover:opacity-90 transition-all">
+        <span class="material-symbols-outlined text-sm">add</span>
+        添加新闻源
+    </a>
 </div>
 {% endif %}
 {% endblock %}
