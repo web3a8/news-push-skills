@@ -5,6 +5,7 @@ from rich.console import Console
 
 from news_push.cli.init import init_command
 from news_push.cli import source_commands, filter_commands, send_commands, cron_commands
+from news_push.cli.web import web_command  # 新增
 
 console = Console()
 
@@ -22,6 +23,7 @@ def cli(ctx):
       news-push filter add        添加过滤器
       news-push send run          立即发送
       news-push cron setup        设置定时任务
+      news-push web               启动 Web UI
 
     \b
     获取帮助:
@@ -39,6 +41,9 @@ cli.add_command(source_commands, name="source")
 cli.add_command(filter_commands, name="filter")
 cli.add_command(send_commands, name="send")
 cli.add_command(cron_commands, name="cron")
+
+# 添加web命令
+cli.add_command(web_command, name="web")  # 新增
 
 
 if __name__ == "__main__":
