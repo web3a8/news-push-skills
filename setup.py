@@ -10,9 +10,8 @@ with open("README.md", "r", encoding="utf-8") as fh:
 setup(
     name="news-push-skill",
     version="0.1.0",
-    author="Your Name",
-    author_email="your.email@example.com",
-    description="A skill for fetching, filtering, and pushing news to various channels",
+    author="News Push Contributors",
+    description="A Claude Code skill for fetching, filtering, and pushing news to email",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/yourusername/news-push-skill",
