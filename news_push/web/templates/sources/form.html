@@ -23,10 +23,11 @@
         <div class="form-group">
             <label for="source_type">类型</label>
             <select id="source_type" name="source_type">
-                <option value="rss">RSS</option>
-                <option value="api">API</option>
-                <option value="custom">自定义</option>
+                <option value="rss" selected>RSS</option>
+                <option value="api" disabled>API（即将推出）</option>
+                <option value="custom" disabled>自定义（即将推出）</option>
             </select>
+            <small>目前仅支持 RSS 类型，其他类型正在开发中</small>
         </div>
 
         <div class="form-group">

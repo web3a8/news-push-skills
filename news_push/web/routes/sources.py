@@ -60,13 +60,39 @@ def add_source():
         # 保存到数据库
         db = DatabaseManager()
         try:
-            db.create_source(
+            source = db.create_source(
                 name=name,
                 url=url,
                 source_type=source_type,
                 update_interval=update_interval
             )
-            flash(f"新闻源 '{name}' 添加成功", "success")
+
+            # 立即抓取一次新闻
+            try:
+                from news_push.fetchers.adapter import SimpleFetcher
+
+                fetcher = SimpleFetcher(name=name, url=url)
+                articles = fetcher.fetch()
+
+                # 保存抓取到的文章
+                saved_count = 0
+                for article in articles:
+                    created = db.create_article(
+                        source_id=source.id,
+                        title=article.title,
+                        url=article.url,
+                        content=article.content,
+                        summary=article.summary,
+                        author=article.author,
+                        published_at=article.published_at
+                    )
+                    if created:
+                        saved_count += 1
+
+                flash(f"新闻源 '{name}' 添加成功，已抓取 {saved_count} 篇文章", "success")
+            except Exception as fetch_error:
+                flash(f"新闻源 '{name}' 添加成功，但抓取失败：{str(fetch_error)}", "warning")
+
             return redirect(url_for("sources.list_sources"))
         except Exception as e:
             flash(f"添加失败：{str(e)}", "error")

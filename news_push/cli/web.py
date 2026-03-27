@@ -1,6 +1,7 @@
 """Web UI CLI 命令"""
 
 import click
+from dotenv import load_dotenv
 
 
 @click.command()
@@ -9,6 +10,9 @@ import click
 @click.option("--debug", is_flag=True, help="调试模式")
 def web_command(port, host, debug):
     """启动 Web 管理界面"""
+    # 自动加载 .env 文件
+    load_dotenv()
+
     from news_push.web import create_app
 
     app = create_app()

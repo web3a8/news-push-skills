@@ -214,6 +214,48 @@ class DatabaseManager:
         session.close()
         return sources
 
+    def create_source(self, name: str, url: str, source_type: str = "rss",
+                     update_interval: int = 60) -> Source:
+        """
+        创建新闻源
+
+        Args:
+            name: 新闻源名称
+            url: 新闻源 URL
+            source_type: 新闻源类型（rss, api, custom）
+            update_interval: 更新间隔（分钟）
+
+        Returns:
+            创建的 Source 对象
+        """
+        # 获取第一个用户
+        session = self.get_session()
+        user = session.query(User).first()
+
+        if not user:
+            session.close()
+            raise ValueError("没有用户，请先运行初始化")
+
+        source = Source(
+            user_id=user.id,
+            name=name,
+            type=source_type,
+            url=url,
+            fetch_interval=update_interval,
+            is_active=True
+        )
+
+        try:
+            session.add(source)
+            session.commit()
+            session.refresh(source)
+            return source
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
     def get_source_by_id(self, source_id: int):
         """
         根据 ID 获取新闻源
@@ -254,6 +296,52 @@ class DatabaseManager:
 
         session.close()
         return False
+
+    def create_article(self, source_id: int, title: str, url: str, content: str = None,
+                      summary: str = None, author: str = None, published_at = None) -> Article:
+        """
+        创建文章（自动去重）
+
+        Args:
+            source_id: 新闻源 ID
+            title: 文章标题
+            url: 文章 URL
+            content: 文章内容
+            summary: 文章摘要
+            author: 作者
+            published_at: 发布时间
+
+        Returns:
+            创建的 Article 对象，如果 URL 已存在则返回 None
+        """
+        session = self.get_session()
+
+        # 检查 URL 是否已存在
+        existing = session.query(Article).filter(Article.url == url).first()
+        if existing:
+            session.close()
+            return None
+
+        article = Article(
+            source_id=source_id,
+            title=title,
+            url=url,
+            content=content,
+            summary=summary,
+            author=author,
+            published_at=published_at
+        )
+
+        try:
+            session.add(article)
+            session.commit()
+            session.refresh(article)
+            return article
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
     def delete_source(self, source_id: int):
         """
