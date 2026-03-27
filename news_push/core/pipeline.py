@@ -1,207 +1,204 @@
-"""Pipeline orchestration for news processing"""
+"""新闻处理管道编排器"""
 
-from typing import List, Dict, Any
+from loguru import logger
+from typing import List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from news_push.storage.database import DatabaseManager
-from news_push.fetchers.base import BaseFetcher
-from news_push.fetchers.rss import RSSFetcher
-from news_push.fetchers.api import APIFetcher
-from news_push.fetchers.scraper import ScraperFetcher
-from news_push.storage.models import Source, Filter
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
-import logging
-
-console = Console()
-logger = logging.getLogger(__name__)
+from news_push.storage.models import User, Source, Filter, Article
+from news_push.fetchers.base import FetchResult
+from news_push.fetchers.adapter import SimpleFetcher
+from news_push.processors.dedup import DeduplicationProcessor
+from news_push.processors.filter import FilterProcessor
+from news_push.processors.summarizer import SummarizerProcessor
+from news_push.senders.email import EmailSender
 
 
 class PipelineOrchestrator:
-    """新闻推送管道编排器"""
+    """新闻处理管道编排器"""
 
-    def __init__(self, db_path: str = None):
-        self.db = DatabaseManager(db_path)
-        self.filter_engine = FilterEngine()
-        self.summarizer = SummarizerEngine()
-        self.emailer = Emailer()
-        self.fetchers = {
-            'rss': RSSFetcher(),
-            'api': APIFetcher(),
-            'scraper': ScraperFetcher()
+    def __init__(self, db_manager: DatabaseManager):
+        """
+        初始化编排器
+
+        Args:
+            db_manager: 数据库管理器
+        """
+        self.db = db_manager
+        self.dedup_processor = DeduplicationProcessor()
+
+    def run(self, user_email: str, dry_run: bool = False) -> dict:
+        """
+        运行完整的新闻处理管道
+
+        Args:
+            user_email: 用户邮箱
+            dry_run: 是否为测试运行（不发送邮件）
+
+        Returns:
+            运行结果统计
+        """
+        logger.info(f"开始运行管道: user={user_email}, dry_run={dry_run}")
+
+        # 1. 获取用户配置
+        user = self.db.get_user(user_email)
+        if not user:
+            logger.error(f"用户不存在: {user_email}")
+            return {"success": False, "error": "用户不存在"}
+
+        # 2. 获取新闻源
+        session = self.db.get_session()
+        try:
+            sources = session.query(Source).filter(
+                Source.user_id == user.id,
+                Source.is_active == True
+            ).all()
+        finally:
+            session.close()
+
+        if not sources:
+            logger.warning(f"没有配置新闻源: {user_email}")
+            return {"success": False, "error": "没有配置新闻源"}
+
+        logger.info(f"加载了 {len(sources)} 个新闻源")
+
+        # 3. 并行抓取所有新闻源
+        all_articles = self._fetch_all_sources(sources)
+
+        if not all_articles:
+            logger.warning("没有抓取到任何文章")
+            return {"success": False, "error": "没有抓取到文章"}
+
+        logger.info(f"共抓取 {len(all_articles)} 篇文章")
+
+        # 4. 去重
+        all_articles = self.dedup_processor.dedup(all_articles)
+        logger.info(f"去重后剩余 {len(all_articles)} 篇文章")
+
+        # 5. 过滤
+        session = self.db.get_session()
+        try:
+            filters = session.query(Filter).filter(
+                Filter.user_id == user.id,
+                Filter.is_active == True
+            ).all()
+        finally:
+            session.close()
+
+        if filters:
+            filter_processor = FilterProcessor(filters)
+            all_articles = filter_processor.apply(all_articles)
+
+        if not all_articles:
+            logger.warning("过滤后没有剩余文章")
+            return {"success": False, "error": "过滤后没有剩余文章"}
+
+        # 6. 生成摘要
+        if user.ai_provider and user.ai_api_key:
+            summarizer = SummarizerProcessor(
+                provider=user.ai_provider,
+                api_key=self.db.secure.decrypt(user.ai_api_key),
+                model=user.ai_model,
+            )
+        else:
+            summarizer = SummarizerProcessor(provider="rule")
+
+        all_articles = summarizer.summarize(all_articles)
+
+        # 7. 保存到数据库
+        self._save_articles(user.id, all_articles)
+
+        # 8. 发送邮件（如果不是 dry run）
+        if not dry_run:
+            success = self._send_email(user, all_articles)
+            if not success:
+                return {"success": False, "error": "邮件发送失败"}
+
+        logger.info(f"管道运行完成: 处理了 {len(all_articles)} 篇文章")
+
+        return {
+            "success": True,
+            "articles_count": len(all_articles),
+            "sources_count": len(sources),
         }
 
-    def fetch_articles(self, source: Source) -> List[Dict[str, Any]]:
-        """从新闻源获取文章"""
-        fetcher = self.fetchers.get(source.type)
-        if not fetcher:
-            raise ValueError(f"不支持的新闻源类型: {source.type}")
+    def _fetch_all_sources(self, sources: List[Source]) -> List[FetchResult]:
+        """并行抓取所有新闻源"""
+        all_articles = []
 
-        return fetcher.fetch(source.url, source.config)
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_source = {
+                executor.submit(self._fetch_source, source): source
+                for source in sources
+            }
 
-    def process_articles(self, articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """处理文章：过滤、摘要"""
-        # 过滤
-        filtered_articles = []
-        for article in articles:
-            if self.filter_engine.should_include(article):
-                filtered_articles.append(article)
+            for future in as_completed(future_to_source):
+                source = future_to_source[future]
+                try:
+                    articles = future.result()
+                    all_articles.extend(articles)
+                except Exception as e:
+                    logger.error(f"抓取新闻源失败: {source.name} - {e}")
 
-        # 摘要生成
-        for article in filtered_articles:
-            if article.get('content'):
-                article['summary'] = self.summarizer.summarize(article['content'])
-            else:
-                article['summary'] = article.get('title', '')
+        return all_articles
 
-        return filtered_articles
+    def _fetch_source(self, source: Source) -> List[FetchResult]:
+        """抓取单个新闻源"""
+        import json
 
-    def send_email(self, articles: List[Dict[str, Any]], user_email: str):
-        """发送邮件"""
-        self.emailer.send(articles, user_email)
+        fetch_config = json.loads(source.fetch_config) if source.fetch_config else {}
 
-    def run_pipeline(self, source_name: str = None, test_mode: bool = False):
-        """运行完整的推送管道"""
+        fetcher = SimpleFetcher(
+            name=source.name,
+            url=source.url,
+            config=fetch_config
+        )
+
+        return fetcher.fetch()
+
+    def _save_articles(self, user_id: int, articles: List[FetchResult]):
+        """保存文章到数据库"""
+        session = self.db.get_session()
         try:
-            # 获取新闻源
-            if source_name:
-                source = self.db.get_source_by_name(source_name)
-                sources = [source]
-            else:
-                sources = self.db.get_all_sources()
+            for article in articles:
+                # 检查是否已存在
+                existing = session.query(Article).filter(Article.url == article.url).first()
+                if existing:
+                    continue
 
-            if not sources:
-                console.print("[yellow]⚠️ 没有找到新闻源[/yellow]")
-                return
+                # 创建新文章
+                db_article = Article(
+                    source_id=1,  # TODO: 关联到正确的 source_id
+                    title=article.title,
+                    url=article.url,
+                    content=article.content,
+                    summary=article.summary,
+                    author=article.author,
+                    published_at=article.published_at,
+                )
+                session.add(db_article)
 
-            all_articles = []
-
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console,
-            ) as progress:
-                for source in sources:
-                    task = progress.add_task(f"抓取 {source.name}", total=None)
-
-                    # 获取文章
-                    articles = self.fetch_articles(source)
-                    progress.update(task, description=f"处理 {len(articles)} 篇文章")
-
-                    # 处理文章
-                    processed_articles = self.process_articles(articles)
-                    all_articles.extend(processed_articles)
-
-                    # 更新数据库
-                    for article in processed_articles:
-                        self.db.save_article(source.id, article)
-
-                    progress.update(task, completed=True)
-
-            if test_mode:
-                console.print(f"[green]✅ 测试完成，共抓取 {len(all_articles)} 篇文章[/green]")
-            else:
-                # 发送邮件
-                user_email = self.db.get_user_email()
-                if user_email:
-                    self.send_email(all_articles, user_email)
-                    console.print(f"[green]✅ 推送完成，共发送 {len(all_articles)} 篇文章到 {user_email}[/green]")
-                else:
-                    console.print("[red]✗ 请先初始化配置[/red]")
-
+            session.commit()
+            logger.info(f"保存了 {len(articles)} 篇文章到数据库")
         except Exception as e:
-            logger.error(f"管道运行失败: {e}")
-            console.print(f"[red]✗ 管道运行失败: {e}[/red]")
+            session.rollback()
+            logger.error(f"保存文章失败: {e}")
+        finally:
+            session.close()
 
-
-class FilterEngine:
-    """过滤引擎"""
-
-    def should_include(self, article: Dict[str, Any]) -> bool:
-        """判断文章是否应该包含"""
-        rules = DatabaseManager().get_all_filters()
-
-        for rule in rules:
-            if rule.action == 'exclude' and self._matches_rule(article, rule):
-                return False
-            elif rule.action == 'include' and not self._matches_rule(article, rule):
-                return False
-
-        return True
-
-    def _matches_rule(self, article: Dict[str, Any], rule: Filter) -> bool:
-        """检查文章是否匹配过滤规则"""
-        content = f"{article.get('title', '')} {article.get('content', '')}"
-
-        if rule.type == 'keyword':
-            return rule.rule.lower() in content.lower()
-        elif rule.type == 'category':
-            return rule.rule.lower() in article.get('category', '').lower()
-        elif rule.type == 'regex':
-            import re
-            return bool(re.search(rule.rule, content))
-
-        return False
-
-
-class SummarizerEngine:
-    """摘要生成引擎"""
-
-    def summarize(self, content: str) -> str:
-        """生成文章摘要"""
-        # 简单的实现：截取前200个字符
-        if len(content) > 200:
-            return content[:200] + "..."
-        return content
-
-
-class Emailer:
-    """邮件发送器"""
-
-    def send(self, articles: List[Dict[str, Any]], user_email: str):
+    def _send_email(self, user: User, articles: List[FetchResult]) -> bool:
         """发送邮件"""
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-        import smtplib
+        sender = EmailSender(
+            smtp_host=user.smtp_host,
+            smtp_port=user.smtp_port,
+            smtp_username=user.smtp_username,
+            smtp_password=self.db.secure.decrypt(user.smtp_password),
+            smtp_use_tls=user.smtp_use_tls,
+        )
 
-        # 创建邮件
-        msg = MIMEMultipart()
-        msg['From'] = 'news-push@localhost'
-        msg['To'] = user_email
-        msg['Subject'] = '今日新闻推送'
-
-        # 构建HTML内容
-        html_content = """
-        <html>
-        <body>
-        <h1>今日新闻推送</h1>
-        """
-
-        for i, article in enumerate(articles, 1):
-            html_content += f"""
-            <div style="border: 1px solid #ddd; margin: 10px; padding: 10px; border-radius: 5px;">
-                <h3>{i}. {article.get('title', '')}</h3>
-                <p><strong>摘要：</strong>{article.get('summary', '')}</p>
-                <p><strong>来源：</strong>{article.get('source_name', '')}</p>
-                <p><strong>时间：</strong>{article.get('published_at', '')}</p>
-                <p><strong>链接：</strong><a href="{article.get('url', '')}">查看原文</a></p>
-            </div>
-            """
-
-        html_content += """
-        </body>
-        </html>
-        """
-
-        msg.attach(MIMEText(html_content, 'html'))
-
-        # 发送邮件（需要配置SMTP）
-        try:
-            # 这里需要实际的SMTP配置
-            # server = smtplib.SMTP('smtp.example.com', 587)
-            # server.starttls()
-            # server.login('user', 'pass')
-            # server.send_message(msg)
-            # server.quit()
-
-            console.print(f"[green]邮件已发送到 {user_email}[/green]")
-        except Exception as e:
-            console.print(f"[red]邮件发送失败: {e}[/red]")
+        return sender.send_articles(
+            to_email=user.email,
+            articles=articles,
+            subject="新闻推送",
+            theme="default",
+        )
