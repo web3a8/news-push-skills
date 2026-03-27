@@ -1,9 +1,9 @@
 """数据库管理 - 连接和会话管理"""
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Optional, List
-from sqlalchemy import create_engine, desc
+from sqlalchemy import create_engine, desc, func
 from sqlalchemy.orm import sessionmaker, Session
 from news_push.storage.models import Base, User, Source, Filter, Article, SentHistory
 from news_push.storage.security import SecureStorage
@@ -179,3 +179,25 @@ class DatabaseManager:
                         .all()
         session.close()
         return articles
+
+    def get_statistics(self) -> dict:
+        """
+        获取统计信息
+
+        Returns:
+            包含 sources_count, today_articles, total_articles 的字典
+        """
+        from sqlalchemy import func
+        from datetime import date
+
+        session = self.get_session()
+
+        stats = {
+            "sources_count": session.query(Source).count(),
+            "today_articles": session.query(Article)
+                .filter(func.date(Article.fetched_at) == date.today())
+                .count(),
+            "total_articles": session.query(Article).count(),
+        }
+        session.close()
+        return stats
