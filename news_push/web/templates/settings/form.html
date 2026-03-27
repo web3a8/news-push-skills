@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}系统设置 - News Push{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>⚙️ 系统设置</h2>
+</div>
+
+<div class="card settings-form">
+    <form method="POST">
+        <h3>邮件配置</h3>
+
+        <div class="form-group">
+            <label for="email">邮箱地址 *</label>
+            <input type="email" id="email" name="email" required value="{{ user.email }}">
+        </div>
+
+        <div class="form-group">
+            <label for="smtp_host">SMTP 主机 *</label>
+            <input type="text" id="smtp_host" name="smtp_host" required value="{{ user.smtp_host }}" placeholder="smtp.gmail.com">
+        </div>
+
+        <div class="form-group">
+            <label for="smtp_port">SMTP 端口 *</label>
+            <input type="number" id="smtp_port" name="smtp_port" required value="{{ user.smtp_port }}" placeholder="587">
+        </div>
+
+        <div class="form-group">
+            <label for="smtp_username">SMTP 用户名</label>
+            <input type="text" id="smtp_username" name="smtp_username" value="{{ user.smtp_username }}">
+        </div>
+
+        <div class="form-group">
+            <label for="smtp_password">SMTP 密码</label>
+            <input type="password" id="smtp_password" name="smtp_password" placeholder="留空则不修改">
+            <small>密码将加密存储</small>
+        </div>
+
+        <button type="submit" class="btn btn-primary">保存设置</button>
+    </form>
+</div>
+
+<div class="card security-note">
+    <h3>🔒 安全提示</h3>
+    <ul>
+        <li>所有敏感信息（密码、API 密钥）均使用加密存储</li>
+        <li>加密密钥保存在 .env 文件中，请妥善保管</li>
+        <li>建议定期备份配置和数据库</li>
+    </ul>
+</div>
+{% endblock %}
