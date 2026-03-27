@@ -201,3 +201,18 @@ class DatabaseManager:
         }
         session.close()
         return stats
+
+    def get_source_by_id(self, source_id: int):
+        """
+        根据 ID 获取新闻源
+
+        Args:
+            source_id: 新闻源 ID
+
+        Returns:
+            新闻源对象，如果不存在返回 None
+        """
+        session = self.get_session()
+        source = session.query(Source).filter(Source.id == source_id).first()
+        session.close()
+        return source
