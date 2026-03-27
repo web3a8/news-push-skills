@@ -216,3 +216,45 @@ class DatabaseManager:
         source = session.query(Source).filter(Source.id == source_id).first()
         session.close()
         return source
+
+    def update_source(self, source_id: int, **kwargs):
+        """
+        更新新闻源
+
+        Args:
+            source_id: 新闻源 ID
+            **kwargs: 要更新的字段
+
+        Returns:
+            是否更新成功
+        """
+        session = self.get_session()
+        source = session.query(Source).filter(Source.id == source_id).first()
+
+        if source:
+            for key, value in kwargs.items():
+                if hasattr(source, key):
+                    setattr(source, key, value)
+
+            session.commit()
+            session.close()
+            return True
+
+        session.close()
+        return False
+
+    def delete_source(self, source_id: int):
+        """
+        删除新闻源
+
+        Args:
+            source_id: 新闻源 ID
+        """
+        session = self.get_session()
+        source = session.query(Source).filter(Source.id == source_id).first()
+
+        if source:
+            session.delete(source)
+            session.commit()
+
+        session.close()

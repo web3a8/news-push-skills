@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}编辑新闻源 - News Push{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>编辑新闻源</h2>
+    <a href="{{ url_for('sources.list_sources') }}" class="btn">返回列表</a>
+</div>
+
+<div class="card">
+    <form method="POST">
+        <div class="form-group">
+            <label for="name">名称 *</label>
+            <input type="text" id="name" name="name" required value="{{ source.name }}">
+        </div>
+
+        <div class="form-group">
+            <label for="url">URL *</label>
+            <input type="url" id="url" name="url" required value="{{ source.url }}">
+        </div>
+
+        <div class="form-group">
+            <label for="source_type">类型</label>
+            <select id="source_type" name="source_type">
+                <option value="rss" {% if source.source_type == 'rss' %}selected{% endif %}>RSS</option>
+                <option value="api" {% if source.source_type == 'api' %}selected{% endif %}>API</option>
+                <option value="custom" {% if source.source_type == 'custom' %}selected{% endif %}>自定义</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="update_interval">更新频率（分钟）</label>
+            <input type="number" id="update_interval" name="update_interval" value="{{ source.update_interval }}" min="1">
+        </div>
+
+        <button type="submit" class="btn btn-primary">保存</button>
+    </form>
+</div>
+{% endblock %}
