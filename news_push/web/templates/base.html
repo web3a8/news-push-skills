@@ -88,14 +88,12 @@
 <body class="font-body selection:bg-primary-container selection:text-on-primary-container">
     <!-- TopAppBar -->
     <header class="fixed top-0 w-full z-50 bg-[#0b1326]/80 backdrop-blur-xl shadow-[0_32px_64px_-15px_rgba(6,14,32,0.6)]">
-        <div class="flex justify-between items-center px-6 md:px-12 py-4 w-full max-w-7xl mx-auto">
+        <div class="flex justify-between items-center px-6 md:px-12 py-3 w-full max-w-7xl mx-auto">
             <div class="text-2xl font-black tracking-tighter text-[#b5c4ff] bg-gradient-to-br from-[#b5c4ff] to-[#2e67f8] bg-clip-text text-transparent font-headline">
                 <a href="{{ url_for('home.index') }}" class="hover:opacity-90 transition-opacity">News Push</a>
             </div>
             <nav class="hidden md:flex items-center gap-8">
                 <a class="text-[#b5c4ff] relative after:absolute after:bottom-[-4px] after:left-0 after:w-full after:h-0.5 after:bg-[#2e67f8] font-headline font-bold tracking-tight text-lg" href="{{ url_for('home.index') }}">首页</a>
-                <a class="text-[#b9c7df] font-medium font-headline tracking-tight text-lg hover:bg-[#171f33]/50 hover:text-[#fbf9ff] transition-all duration-300 px-3 py-1 rounded-lg" href="{{ url_for('sources.list_sources') }}">新闻源</a>
-                <a class="text-[#b9c7df] font-medium font-headline tracking-tight text-lg hover:bg-[#171f33]/50 hover:text-[#fbf9ff] transition-all duration-300 px-3 py-1 rounded-lg" href="{{ url_for('settings.settings') }}">设置</a>
             </nav>
         </div>
     </header>

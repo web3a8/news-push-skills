@@ -27,10 +27,11 @@ def create_app():
     app.jinja_env.filters["nl2br"] = nl2br
 
     # 注册蓝图
-    from news_push.web.routes import home_bp, sources_bp, articles_bp, settings_bp
+    from news_push.web.routes import home_bp, sources_bp, articles_bp, settings_bp, api_bp
     app.register_blueprint(home_bp)
     app.register_blueprint(sources_bp)
     app.register_blueprint(articles_bp)
     app.register_blueprint(settings_bp)
+    app.register_blueprint(api_bp)
 
     return app
