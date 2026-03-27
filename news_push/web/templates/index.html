@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - News Push{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h2>欢迎使用 News Push</h2>
+    <p>自动获取新闻热点并推送到邮箱</p>
+</div>
+
+<div class="stats-grid">
+    <div class="card">
+        <h3>📡 新闻源</h3>
+        <p class="stat-number">{{ stats.sources_count }}</p>
+    </div>
+
+    <div class="card">
+        <h3>📰 今日文章</h3>
+        <p class="stat-number">{{ stats.today_articles }}</p>
+    </div>
+
+    <div class="card">
+        <h3>📚 总文章数</h3>
+        <p class="stat-number">{{ stats.total_articles }}</p>
+    </div>
+</div>
+
+<div class="quick-actions">
+    <a href="{{ url_for('sources.add_source') }}" class="btn btn-primary">添加新闻源</a>
+    <a href="{{ url_for('articles.list_articles') }}" class="btn">浏览文章</a>
+</div>
+{% endblock %}
