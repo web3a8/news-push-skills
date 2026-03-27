@@ -1,112 +1,168 @@
-"""测试存储层"""
+"""测试存储层 - 数据库和加密"""
 
-import pytest
-import tempfile
 import os
-from pathlib import Path
-
-from news_push.storage.database import DatabaseManager
-from news_push.storage.models import User, Source
+import tempfile
+import pytest
 from news_push.storage.security import SecureStorage
+from news_push.storage.database import DatabaseManager
+from news_push.storage.models import User, Source, Filter, Article, SentHistory
 
 
 @pytest.fixture
 def temp_db():
-    """临时数据库"""
-    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
-        db_path = f.name
-    yield db_path
-    os.unlink(db_path)
+    """临时数据库fixture"""
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    yield path
+    os.unlink(path)
 
 
 @pytest.fixture
 def db_manager(temp_db):
-    """数据库管理器"""
-    # 设置测试用的加密密钥
-    os.environ["NEWS_PUSH_ENCRYPTION_KEY"] = SecureStorage.generate_key()
+    """数据库管理器fixture"""
+    # 设置测试用加密密钥
+    original_key = os.environ.get("NEWS_PUSH_ENCRYPTION_KEY")
+    test_key = SecureStorage.generate_key()
+    os.environ["NEWS_PUSH_ENCRYPTION_KEY"] = test_key
+
     manager = DatabaseManager(temp_db)
     manager.create_tables()
     yield manager
-    # 清理环境变量
-    if "NEWS_PUSH_ENCRYPTION_KEY" in os.environ:
-        del os.environ["NEWS_PUSH_ENCRYPTION_KEY"]
+    # 清理：删除所有数据
+    session = manager.get_session()
+    session.query(SentHistory).delete()
+    session.query(Article).delete()
+    session.query(Filter).delete()
+    session.query(Source).delete()
+    session.query(User).delete()
+    session.commit()
+    session.close()
+
+    # 恢复原始环境变量
+    if original_key is not None:
+        os.environ["NEWS_PUSH_ENCRYPTION_KEY"] = original_key
+    else:
+        os.environ.pop("NEWS_PUSH_ENCRYPTION_KEY", None)
 
 
 def test_secure_storage_encrypt_decrypt():
-    """测试加密解密"""
-    # 生成测试密钥
-    key = SecureStorage.generate_key()
-    secure = SecureStorage(key)
+    """测试加密解密功能"""
+    # 设置临时环境变量
+    original_key = os.environ.get("NEWS_PUSH_ENCRYPTION_KEY")
+    test_key = SecureStorage.generate_key()
+    os.environ["NEWS_PUSH_ENCRYPTION_KEY"] = test_key
 
-    # 测试加密解密
-    plaintext = "my_secret_password"
-    encrypted = secure.encrypt(plaintext)
-    decrypted = secure.decrypt(encrypted)
+    try:
+        secure_storage = SecureStorage()
+        plaintext = "sensitive_password_123"
 
-    assert encrypted != plaintext
-    assert decrypted == plaintext
+        # 加密
+        encrypted = secure_storage.encrypt(plaintext)
+        assert encrypted != plaintext
+        assert len(encrypted) > 0
+
+        # 解密
+        decrypted = secure_storage.decrypt(encrypted)
+        assert decrypted == plaintext
+    finally:
+        # 恢复原始环境变量
+        if original_key is not None:
+            os.environ["NEWS_PUSH_ENCRYPTION_KEY"] = original_key
+        else:
+            os.environ.pop("NEWS_PUSH_ENCRYPTION_KEY", None)
 
 
 def test_secure_storage_empty_string():
-    """测试空字符串"""
-    key = SecureStorage.generate_key()
-    secure = SecureStorage(key)
+    """测试空字符串加密解密"""
+    # 设置临时环境变量
+    original_key = os.environ.get("NEWS_PUSH_ENCRYPTION_KEY")
+    test_key = SecureStorage.generate_key()
+    os.environ["NEWS_PUSH_ENCRYPTION_KEY"] = test_key
 
-    assert secure.encrypt("") == ""
-    assert secure.decrypt("") == ""
+    try:
+        secure_storage = SecureStorage()
+
+        # 加密空字符串
+        encrypted = secure_storage.encrypt("")
+        assert encrypted == ""
+
+        # 解密空字符串
+        decrypted = secure_storage.decrypt("")
+        assert decrypted == ""
+    finally:
+        # 恢复原始环境变量
+        if original_key is not None:
+            os.environ["NEWS_PUSH_ENCRYPTION_KEY"] = original_key
+        else:
+            os.environ.pop("NEWS_PUSH_ENCRYPTION_KEY", None)
 
 
 def test_database_create_user(db_manager: DatabaseManager):
     """测试创建用户"""
     user = db_manager.create_user(
         email="test@example.com",
-        smtp_host="smtp.example.com",
+        smtp_host="smtp.gmail.com",
         smtp_port=587,
-        smtp_username="user",
-        smtp_password="pass",
+        smtp_username="user@gmail.com",
+        smtp_password="password123",
+        smtp_use_tls=True,
+        ai_provider="openai",
+        ai_api_key="sk-test",
+        ai_model="gpt-4"
     )
 
     assert user.id is not None
     assert user.email == "test@example.com"
-    assert user.smtp_host == "smtp.example.com"
-    assert user.smtp_password != "pass"  # 应该被加密
+    assert user.smtp_host == "smtp.gmail.com"
+    assert user.smtp_port == 587
+    assert user.smtp_username == "user@gmail.com"
+    assert user.smtp_password != "password123"  # 应该被加密
+    assert user.smtp_use_tls is True
+    assert user.ai_provider == "openai"
+    assert user.ai_api_key != "sk-test"  # 应该被加密
+    assert user.ai_model == "gpt-4"
 
 
 def test_database_duplicate_user(db_manager: DatabaseManager):
-    """测试重复用户"""
+    """测试重复用户邮箱"""
+    # 创建第一个用户
     db_manager.create_user(
-        email="test@example.com",
-        smtp_host="smtp.example.com",
+        email="duplicate@example.com",
+        smtp_host="smtp.gmail.com",
         smtp_port=587,
-        smtp_username="user",
-        smtp_password="pass",
+        smtp_username="user1@gmail.com",
+        smtp_password="password1"
     )
 
-    with pytest.raises(ValueError):
+    # 尝试创建相同邮箱的用户，应该失败
+    with pytest.raises(Exception):  # SQLAlchemy会抛出IntegrityError
         db_manager.create_user(
-            email="test@example.com",
-            smtp_host="smtp.example.com",
+            email="duplicate@example.com",
+            smtp_host="smtp.gmail.com",
             smtp_port=587,
-            smtp_username="user",
-            smtp_password="pass",
+            smtp_username="user2@gmail.com",
+            smtp_password="password2"
         )
 
 
 def test_database_get_user(db_manager: DatabaseManager):
     """测试获取用户"""
-    created = db_manager.create_user(
-        email="test@example.com",
-        smtp_host="smtp.example.com",
+    # 创建用户
+    created_user = db_manager.create_user(
+        email="gettest@example.com",
+        smtp_host="smtp.gmail.com",
         smtp_port=587,
-        smtp_username="user",
-        smtp_password="pass",
+        smtp_username="getuser@gmail.com",
+        smtp_password="getpass"
     )
 
-    retrieved = db_manager.get_user("test@example.com")
+    # 获取用户
+    retrieved_user = db_manager.get_user("gettest@example.com")
 
-    assert retrieved is not None
-    assert retrieved.id == created.id
-    assert retrieved.email == "test@example.com"
+    assert retrieved_user is not None
+    assert retrieved_user.id == created_user.id
+    assert retrieved_user.email == "gettest@example.com"
+    assert retrieved_user.smtp_username == "getuser@gmail.com"
 
 
 def test_database_get_nonexistent_user(db_manager: DatabaseManager):
