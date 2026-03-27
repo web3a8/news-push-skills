@@ -60,7 +60,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "news-push=news_push.cli:main",
+            "news-push=news_push.main:cli",
         ],
     },
 )
