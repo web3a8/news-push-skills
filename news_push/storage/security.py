@@ -1,136 +1,68 @@
-"""
-Encryption utilities for secure storage.
-
-Uses Fernet symmetric encryption for sensitive data.
-"""
+"""敏感信息加密存储"""
 
 import os
-import base64
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from pathlib import Path
 
 
 class SecureStorage:
-    """Secure storage with encryption/decryption capabilities."""
+    """使用 Fernet 加密存储敏感信息"""
 
-    def __init__(self, password: str = None):
+    def __init__(self, encryption_key: str | None = None):
         """
-        Initialize SecureStorage.
+        初始化加密存储
 
         Args:
-            password: Password for encryption. If None, reads from environment variable.
-
-        Raises:
-            ValueError: If no password is provided and NEWS_PUSH_ENCRYPTION_KEY is not set.
+            encryption_key: 32 字节的加密密钥，如果为 None 则从环境变量读取
         """
-        if password is None:
-            password = os.environ.get('NEWS_PUSH_ENCRYPTION_KEY')
+        if encryption_key is None:
+            encryption_key = os.environ.get("NEWS_PUSH_ENCRYPTION_KEY")
+            if not encryption_key:
+                raise ValueError(
+                    "NEWS_PUSH_ENCRYPTION_KEY 环境变量未设置。"
+                    "请先运行 /news init 初始化配置。"
+                )
 
-        if not password:
-            raise ValueError(
-                "Encryption password not provided. "
-                "Set NEWS_PUSH_ENCRYPTION_KEY environment variable or pass password directly."
-            )
+        # 确保密钥是有效的 Fernet 密钥
+        try:
+            self.cipher = Fernet(encryption_key.encode() if isinstance(encryption_key, str) else encryption_key)
+        except Exception as e:
+            raise ValueError(f"无效的加密密钥: {e}")
 
-        # Derive key from password
-        self._key = self._derive_key(password)
-        self.cipher = Fernet(self._key)
-
-    def _derive_key(self, password: str) -> bytes:
-        """
-        Derive a 32-byte key from password using PBKDF2.
-
-        Args:
-            password: Password string
-
-        Returns:
-            32-byte key suitable for Fernet
-        """
-        # Use a fixed salt for simplicity (in production, use random salt per instance)
-        salt = b'news-push-skill-salt'
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100000,
-        )
-        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-        return key
+    @staticmethod
+    def generate_key() -> str:
+        """生成新的加密密钥"""
+        return Fernet.generate_key().decode()
 
     def encrypt(self, plaintext: str) -> str:
         """
-        Encrypt plaintext string.
+        加密文本
 
         Args:
-            plaintext: String to encrypt
+            plaintext: 明文
 
         Returns:
-            Encrypted string (base64 encoded)
-
-        Raises:
-            ValueError: If plaintext is None
+            加密后的文本（Base64 编码）
         """
-        if plaintext is None:
-            raise ValueError("Cannot encrypt None value")
-
         if not plaintext:
-            # Return empty string for empty input
             return ""
+        encrypted = self.cipher.encrypt(plaintext.encode())
+        return encrypted.decode()
 
-        encrypted_bytes = self.cipher.encrypt(plaintext.encode())
-        return encrypted_bytes.decode()
-
-    def decrypt(self, ciphertext: str) -> str:
+    def decrypt(self, encrypted: str) -> str:
         """
-        Decrypt ciphertext string.
+        解密文本
 
         Args:
-            ciphertext: Encrypted string (base64 encoded)
+            encrypted: 加密的文本
 
         Returns:
-            Decrypted plaintext string
-
-        Raises:
-            ValueError: If ciphertext is None or invalid
+            解密后的明文
         """
-        if ciphertext is None:
-            raise ValueError("Cannot decrypt None value")
-
-        if not ciphertext:
-            # Return empty string for empty input
+        if not encrypted:
             return ""
-
         try:
-            decrypted_bytes = self.cipher.decrypt(ciphertext.encode())
-            return decrypted_bytes.decode()
+            decrypted = self.cipher.decrypt(encrypted.encode())
+            return decrypted.decode()
         except Exception as e:
-            raise ValueError(f"Decryption failed: {e}")
-
-    def encrypt_dict(self, data: dict) -> str:
-        """
-        Encrypt dictionary as JSON string.
-
-        Args:
-            data: Dictionary to encrypt
-
-        Returns:
-            Encrypted JSON string
-        """
-        import json
-        json_str = json.dumps(data)
-        return self.encrypt(json_str)
-
-    def decrypt_dict(self, ciphertext: str) -> dict:
-        """
-        Decrypt JSON string to dictionary.
-
-        Args:
-            ciphertext: Encrypted JSON string
-
-        Returns:
-            Decrypted dictionary
-        """
-        import json
-        json_str = self.decrypt(ciphertext)
-        return json.loads(json_str)
+            raise ValueError(f"解密失败: {e}")
