@@ -3,7 +3,7 @@
 {% block title %}首页 - News Push{% endblock %}
 
 {% block content %}
-<!-- Dashboard Header & Stats -->
+<!-- Dashboard Stats -->
 <section class="mb-10">
     <!-- Bento Stats Grid -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
@@ -11,26 +11,26 @@
             <button onclick="openSourceModal()" class="absolute top-4 right-4 p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-highest rounded-lg transition-all duration-200 group">
                 <span class="material-symbols-outlined text-lg group-hover:rotate-90 transition-transform duration-300">settings</span>
             </button>
-            <span class="text-secondary text-sm font-label uppercase tracking-widest">News Sources</span>
+            <span class="text-secondary text-sm font-label uppercase tracking-widest">新闻源</span>
             <div class="mt-4 flex items-baseline gap-2">
                 <span class="text-5xl font-headline font-bold text-primary">{{ stats.sources_count }}</span>
-                <span class="text-on-surface-variant text-sm">新闻源</span>
+                <span class="text-on-surface-variant text-sm">个</span>
             </div>
         </div>
 
         <div class="bg-surface-bright/10 backdrop-blur-md p-6 rounded-xl border-none shadow-[0_8px_32px_0_rgba(6,14,32,0.37)] flex flex-col justify-between">
-            <span class="text-secondary text-sm font-label uppercase tracking-widest text-[#89ceff]">Today's Articles</span>
+            <span class="text-secondary text-sm font-label uppercase tracking-widest text-[#89ceff]">今日文章</span>
             <div class="mt-4 flex items-baseline gap-2">
                 <span class="text-5xl font-headline font-bold text-[#89ceff]">{{ stats.today_articles }}</span>
-                <span class="text-on-surface-variant text-sm">今日文章</span>
+                <span class="text-on-surface-variant text-sm">篇</span>
             </div>
         </div>
 
         <div class="bg-surface-bright/10 backdrop-blur-md p-6 rounded-xl border-none shadow-[0_8px_32px_0_rgba(6,14,32,0.37)] flex flex-col justify-between">
-            <span class="text-secondary text-sm font-label uppercase tracking-widest">Total Articles</span>
+            <span class="text-secondary text-sm font-label uppercase tracking-widest">总文章</span>
             <div class="mt-4 flex items-baseline gap-2">
                 <span class="text-5xl font-headline font-bold text-on-primary-container">{{ stats.total_articles }}</span>
-                <span class="text-on-surface-variant text-sm">总文章数</span>
+                <span class="text-on-surface-variant text-sm">篇</span>
             </div>
         </div>
     </div>
@@ -46,56 +46,41 @@
     {% endif %}
 </section>
 
-<!-- Compact News Feed -->
+<!-- Waterfall News Feed -->
 {% if articles %}
-<section class="space-y-4">
+<section id="articles-container" class="columns-1 md:columns-2 lg:columns-3 gap-4 space-y-4">
     {% for article in articles %}
-    <article class="group bg-surface-container-low hover:bg-surface-container transition-all duration-300 p-5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4 border-transparent hover:border-primary-container">
-        <div class="flex-1 space-y-2">
-            <div class="flex items-center gap-3 text-xs font-label">
-                <span class="text-primary font-semibold tracking-wide uppercase">{{ article.source.name if article.source else '未知来源' }}</span>
-                <span class="text-outline">•</span>
-                <span class="text-on-surface-variant">
-                    {% if article.published_at %}
-                        {{ article.published_at.strftime('%Y-%m-%d %H:%M') }}
-                    {% else %}
-                        {{ article.fetched_at.strftime('%Y-%m-%d %H:%M') }}
-                    {% endif %}
-                </span>
-            </div>
-            <h2 class="font-headline text-xl font-bold text-primary group-hover:text-on-primary-container transition-colors leading-tight">
-                <a href="{{ url_for('articles.article_detail', article_id=article.id) }}">{{ article.title }}</a>
-            </h2>
-            {% if article.summary or article.content %}
-            <p class="text-on-surface-variant text-sm line-clamp-2 max-w-3xl leading-relaxed">
-                {{ (article.summary or article.content)[:150] }}...
-            </p>
-            {% endif %}
+    <article class="break-inside-avoid bg-surface-container-low hover:bg-surface-container transition-all duration-300 p-5 rounded-xl border-l-4 border-transparent hover:border-primary-container group">
+        <div class="flex items-center gap-3 text-xs font-label mb-3">
+            <span class="text-primary font-semibold tracking-wide uppercase">{{ article.source.name if article.source else '未知来源' }}</span>
+            <span class="text-outline">•</span>
+            <span class="text-on-surface-variant">
+                {% if article.published_at %}
+                    {{ article.published_at.strftime('%Y-%m-%d %H:%M') }}
+                {% else %}
+                    {{ article.fetched_at.strftime('%Y-%m-%d %H:%M') }}
+                {% endif %}
+            </span>
         </div>
-        <div class="flex items-center gap-4 shrink-0">
-            <a href="{{ article.url }}" target="_blank" class="flex items-center gap-2 px-4 py-2 bg-surface-container-highest text-primary font-medium text-sm rounded-lg hover:bg-primary-container hover:text-on-primary-container transition-all active:scale-95 group/btn">
-                打开原文
-                <span class="material-symbols-outlined text-sm group-hover/btn:translate-x-1 transition-transform">arrow_outward</span>
+        <h2 class="font-headline text-lg font-bold text-primary leading-tight line-clamp-3">
+            {{ article.title }}
+        </h2>
+        <div class="mt-4 pt-4 border-t border-outline-variant/10 flex items-center justify-between">
+            <a href="{{ article.url }}" target="_blank" class="text-sm text-secondary hover:text-primary transition-colors flex items-center gap-1 group/link">
+                查看原文
+                <span class="material-symbols-outlined text-sm group-hover/link:translate-x-1 transition-transform">open_in_new</span>
             </a>
         </div>
     </article>
     {% endfor %}
 </section>
 
-<!-- Pagination -->
-<div class="mt-12 flex justify-center items-center gap-4">
-    {% if page > 1 %}
-    <a href="/?page={{ page - 1 }}{% if current_source_id %}&source_id={{ current_source_id }}{% endif %}" class="flex items-center gap-2 px-6 py-2 bg-surface-container text-on-surface font-medium rounded-full hover:bg-surface-container-highest transition-all duration-300">
-        <span class="material-symbols-outlined text-sm">chevron_left</span>
-        上一页
-    </a>
-    {% endif %}
-    <span class="text-on-surface-variant text-sm">第 {{ page }} 页</span>
-    <a href="/?page={{ page + 1 }}{% if current_source_id %}&source_id={{ current_source_id }}{% endif %}" class="flex items-center gap-2 px-6 py-2 bg-surface-container text-on-surface font-medium rounded-full hover:bg-surface-container-highest transition-all duration-300">
-        下一页
-        <span class="material-symbols-outlined text-sm">chevron_right</span>
-    </a>
+<!-- Loading Indicator -->
+<div id="loading-indicator" class="hidden text-center py-8">
+    <span class="material-symbols-outlined text-4xl text-primary animate-spin">loading</span>
+    <p class="text-on-surface-variant mt-2">加载中...</p>
 </div>
+
 {% else %}
 <div class="bg-surface-container-low p-12 rounded-xl text-center">
     <div class="text-6xl mb-4">📰</div>
@@ -114,10 +99,10 @@
     <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeSourceModal()"></div>
 
     <!-- Modal Content -->
-    <div class="absolute inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-3xl max-h-[80vh] overflow-hidden">
+    <div class="absolute inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
         <div class="bg-surface-container rounded-2xl shadow-2xl border border-outline-variant/20 flex flex-col h-full">
             <!-- Header -->
-            <div class="flex items-center justify-between px-6 py-4 border-b border-outline-variant/10">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-outline-variant/10 shrink-0">
                 <div>
                     <h2 class="font-headline text-2xl font-bold text-primary">新闻源管理</h2>
                     <p class="text-on-surface-variant text-sm mt-1">管理您的 RSS 订阅源</p>
@@ -128,9 +113,9 @@
             </div>
 
             <!-- Content -->
-            <div class="flex-1 overflow-y-auto p-6">
+            <div class="flex-1 overflow-y-auto px-6 py-4">
                 <!-- Add Source Form -->
-                <div class="bg-surface-container-low p-4 rounded-xl mb-6">
+                <div class="bg-surface-container-low p-4 rounded-xl mb-6 shrink-0">
                     <h3 class="font-headline text-lg font-bold text-primary mb-4 flex items-center gap-2">
                         <span class="material-symbols-outlined text-sm">add_circle</span>
                         添加新闻源
@@ -216,8 +201,8 @@ async function loadSources() {
 
         container.innerHTML = sources.map(source => `
             <div class="bg-surface-container-low p-4 rounded-xl flex items-center justify-between gap-4 group">
-                <div class="flex-1">
-                    <h4 class="font-headline text-lg font-bold text-primary">${source.name}</h4>
+                <div class="flex-1 min-w-0">
+                    <h4 class="font-headline text-lg font-bold text-primary truncate">${source.name}</h4>
                     <p class="text-on-surface-variant text-sm mt-1 break-all">${source.url}</p>
                     <div class="flex items-center gap-3 mt-2 text-xs font-label">
                         <span class="px-2 py-1 bg-surface-container-highest text-secondary rounded">${source.type}</span>
@@ -225,8 +210,8 @@ async function loadSources() {
                         <span class="${source.is_active ? 'text-tertiary' : 'text-error'}">${source.is_active ? '✓ 活跃' : '✗ 停用'}</span>
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button onclick="deleteSource(${source.id})" class="p-2 text-on-surface-variant hover:text-error hover:bg-error-container/20 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                <div class="flex items-center gap-2 shrink-0">
+                    <button onclick="deleteSource(${source.id})" class="p-2 text-on-surface-variant hover:text-error hover:bg-error-container/20 rounded-lg transition-all">
                         <span class="material-symbols-outlined text-lg">delete</span>
                     </button>
                 </div>
@@ -297,6 +282,70 @@ async function deleteSource(id) {
 // Close modal on escape key
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeSourceModal();
+});
+
+// Infinite scroll
+let currentPage = {{ page }};
+let loading = false;
+let hasMore = true;
+
+async function loadMoreArticles() {
+    if (loading || !hasMore) return;
+
+    loading = true;
+    document.getElementById('loading-indicator').classList.remove('hidden');
+
+    try {
+        const sourceId = {{ current_source_id or 'null' }};
+        const url = sourceId
+            ? `/api/articles?page=${currentPage + 1}&source_id=${sourceId}`
+            : `/api/articles?page=${currentPage + 1}`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.articles.length > 0) {
+            const container = document.getElementById('articles-container');
+            data.articles.forEach(article => {
+                const articleHTML = `
+                    <article class="break-inside-avoid bg-surface-container-low hover:bg-surface-container transition-all duration-300 p-5 rounded-xl border-l-4 border-transparent hover:border-primary-container group">
+                        <div class="flex items-center gap-3 text-xs font-label mb-3">
+                            <span class="text-primary font-semibold tracking-wide uppercase">${article.source_name}</span>
+                            <span class="text-outline">•</span>
+                            <span class="text-on-surface-variant">${article.time}</span>
+                        </div>
+                        <h2 class="font-headline text-lg font-bold text-primary leading-tight line-clamp-3">
+                            ${article.title}
+                        </h2>
+                        <div class="mt-4 pt-4 border-t border-outline-variant/10 flex items-center justify-between">
+                            <a href="${article.url}" target="_blank" class="text-sm text-secondary hover:text-primary transition-colors flex items-center gap-1 group/link">
+                                查看原文
+                                <span class="material-symbols-outlined text-sm group-hover/link:translate-x-1 transition-transform">open_in_new</span>
+                            </a>
+                        </div>
+                    </article>
+                `;
+                container.insertAdjacentHTML('beforeend', articleHTML);
+            });
+
+            currentPage++;
+            hasMore = data.articles.length >= 10;
+        } else {
+            hasMore = false;
+        }
+    } catch (error) {
+        console.error('加载失败:', error);
+    } finally {
+        loading = false;
+        document.getElementById('loading-indicator').classList.add('hidden');
+    }
+}
+
+// Setup infinite scroll
+window.addEventListener('scroll', () => {
+    if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+        loadMoreArticles();
+    }
 });
 </script>
 {% endblock %}

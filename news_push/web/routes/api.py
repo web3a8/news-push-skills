@@ -111,3 +111,28 @@ def delete_source(source_id):
         return jsonify({"success": True, "message": "新闻源已删除"})
     except Exception as e:
         return jsonify({"error": f"删除失败：{str(e)}"}), 500
+
+
+@api_bp.route("/api/articles", methods=["GET"])
+def get_articles():
+    """获取文章列表（分页，用于无限滚动）"""
+    from flask import request
+
+    page = request.args.get("page", 1, type=int)
+    per_page = 10
+    source_id = request.args.get("source_id", type=int)
+
+    offset = (page - 1) * per_page
+
+    db = DatabaseManager()
+    articles = db.get_articles(limit=per_page, offset=offset, source_id=source_id)
+
+    return jsonify({
+        "articles": [{
+            "id": a.id,
+            "title": a.title,
+            "url": a.url,
+            "source_name": a.source.name if a.source else "未知来源",
+            "time": a.published_at.strftime('%Y-%m-%d %H:%M') if a.published_at else a.fetched_at.strftime('%Y-%m-%d %H:%M')
+        } for a in articles]
+    })
