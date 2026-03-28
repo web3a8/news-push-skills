@@ -1,97 +1,89 @@
 # News Push
 
-一个轻量、CLI-first 的本地新闻情报 skill，基于 RSS 订阅。
+> 基于 Claude Code 的 RSS 新闻简报技能，一键生成每日情报摘要。
 
-## Features
+## 功能
 
-- **零外部依赖** — 仅使用 Node.js 内置模块，无 npm 包 flask 緻加
-- **AI 驱动** — Claude 作为 AI 引擎，无需外部 AI API
-- **动态分类** — AI 根据文章内容自动选择领域
-- **双格式输出** — Markdown + 静态 HTML
-- **OPML 管理** — 内置订阅源管理
+- **每日简报** — 自动抓取 RSS 订阅源，AI 生成中文摘要，按领域分类呈现
+- **动态领域分类** — AI 根据当日内容自动归类（科技、金融、安全、社会等），不固定分类
+- **重要事实 & 关键观点** — 区分事实与观点，附来源标注和重要性评分
+- **双格式输出** — Markdown + 精美 HTML，本地直接打开，无需服务器
+- **内置 160+ 订阅源** — 涵盖科技、安全、商业、独立博客等优质信息源
+- **订阅管理** — 随时添加、删除、查看 RSS 订阅源
+- **零依赖** — 仅使用 Node.js 内置模块，无需安装任何 npm 包
 
-- **CLI-first** — 无 web server，所有文件本地可直接打开
+## 安装
 
-## Architecture
+### 前置条件
 
-```
-SKILL.md (this file) → Claude reads and executes
-    ↓
-scripts/sync-feeds.mjs         → Fetch RSS → data/articles.json
-    ↓
-scripts/preprocess-articles.mjs → Strip HTML, truncate, filter noise
-    ↓                              → data/articles-slim.json ( full metadata, for render)
-    ↓                              → data/articles-titles.txt ( one title per line, for AI)
-    ↓
-Claude reads articles-titles.txt → Generates analysis JSON
-    ↓
-Write analysis JSON to data/analysis.json
-    ↓
-scripts/gen-briefing.mjs   → assemble briefing.json from analysis + slim
-    ↓
-scripts/render-html.mjs  → Briefing JSON → HTML
-scripts/render-md.mjs   → Briefing JSON → Markdown
-scripts/manage-opml.mjs  → Manage RSS subscriptions ( add/list/remove )
-scripts/validate-pipeline.mjs → Validate pipeline integrity
-```
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI 已安装并登录
+- Node.js 18+
 
-## File Locations
+### 安装步骤
 
-- `feeds.opml` — RSS subscription source-of-truth
-- `data/sample-briefing.json` — Sample briefing for for development)
-- `output/latest.html` — Generated HTML report
-- `output/latest.md` — generated Markdown report
-- `output/archive/` — timestamped snapshots
-
-## Usage
-
-### Generate report (Markdown)
+将本项目克隆到 Claude Code 的 skills 目录下：
 
 ```bash
-node scripts/sync-feeds.mjs
-node scripts/preprocess-articles.mjs
-# Claude reads data/articles-titles.txt and generates analysis
-# Write analysis to data/analysis.json
-node scripts/gen-briefing.mjs
-node scripts/render-md.mjs data/briefing.json
+# 进入 Claude Code 的 skills 目录（如不存在会自动创建）
+mkdir -p ~/.claude/skills
+
+# 克隆项目
+git clone https://github.com/web3a8/news-push-skills.git ~/.claude/skills/news-push
 ```
 
-### Generate report (HTML)
+安装完成后，在 Claude Code 中直接使用 `/news-push` 即可启动。
 
-```bash
-node scripts/sync-feeds.mjs
-node scripts/preprocess-articles.mjs
-# Claude reads data/articles-titles.txt -> generates analysis
-node scripts/render-html.mjs data/briefing.json
-open output/latest.html
+## 使用方法
+
+### 生成简报（Markdown）
+
+在 Claude Code 中输入：
+
+```
+/news-push
 ```
 
-### Both formats
+### 生成 HTML 简报
 
-```bash
-node scripts/sync-feeds.mjs
-node scripts/preprocess-articles.mjs
-# Claude reads data/articles-titles.txt -> generates analysis
-node scripts/render-html.mjs data/briefing.json
-node scripts/render-md.mjs data/briefing.json
-open output/latest.html
+```
+生成 HTML 格式的新闻简报
 ```
 
-### Manage subscriptions
+### 同时生成两种格式
 
-```bash
-node scripts/manage-opml.mjs list
-node scripts/manage-opml.mjs add "Feed Name" "https://example.com/feed.xml"
-node scripts/manage-opml.mjs remove "Feed Name"
+```
+同时生成 Markdown 和 HTML 格式的简报
 ```
 
-## Design principles
+### 管理订阅源
 
-- CLI-first, all output to local files
-- Zero external dependencies (Node.js built-in only)
-- No web server required
-- AI 驱动 via Claude, not external APIs
+```
+查看当前订阅源
+添加订阅源 "名称" "https://example.com/feed.xml"
+删除订阅源 "名称"
+```
 
-## License
+## 输出示例
+
+生成的 HTML 简报包含以下板块：
+
+| 板块 | 说明 |
+|------|------|
+| 今日速览 | 按领域分类的当日要点摘要 |
+| 原始订阅信息流 | 按时间排列的全部文章列表 |
+
+## 项目结构
+
+```
+news-push/
+├── SKILL.md              # 技能定义文件
+├── feeds.opml            # RSS 订阅源（160+）
+├── scripts/              # 处理脚本
+└── output/               # 生成的简报文件
+    ├── latest.html       # HTML 简报
+    └── latest.md         # Markdown 简报
+```
+
+## 许可证
 
 MIT
