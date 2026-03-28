@@ -1,185 +1,142 @@
-# 新闻推送 Skill
+---
+name: news-push
+description: Generate a local news intelligence report from RSS subscriptions. Use when the user wants `/news-push`, Markdown output, static HTML output, RSS subscription management in OPML, or a lightweight CLI-first news workflow without any web server.
+---
 
-## 概述
+IRON LAW: Do not introduce or rely on a web server. `news-push` must stay CLI-first and produce local files the user can open directly. Zero external dependencies — all scripts use only Node.js built-in modules.
 
-新闻推送系统是一个自动化工具，可以定期获取RSS/Atom新闻源，应用过滤规则，并通过邮件发送定制化的新闻摘要到您的邮箱。
+# News Push
 
-## 主要功能
+## Purpose
 
-- **新闻源管理**: 支持RSS、Atom、JSON Feed等多种新闻源格式
-- **智能过滤**: 支持关键词、正则表达式、AI分类等多种过滤方式
-- **邮件推送**: 自动生成HTML邮件，支持模板定制
-- **定时任务**: 灵活的cron定时任务配置
-- **加密存储**: 敏感信息（密码、API密钥）加密存储
+Turn RSS subscriptions into a lightweight local briefing with:
+- `简报` — global brief + domain briefs (dynamically classified)
+- `重要事实` — source-attributed facts
+- `关键观点` — key opinions
+- `原始订阅信息流` — raw feed articles
 
-## 安装
+**You (Claude) ARE the AI engine.** You generate the briefing JSON using your own capabilities. The scripts only handle data fetching and rendering — no external AI API calls.
 
-```bash
-cd .claude/skills/news-push
-pip install -e .
+## Architecture
+
+```
+SKILL.md (this file) → Claude reads and executes
+    ↓
+scripts/sync-feeds.mjs         → Fetch RSS → data/articles.json
+    ↓
+scripts/preprocess-articles.mjs → Strip HTML, truncate, filter noise
+    ↓                              → data/articles-slim.json (full metadata, for render)
+    ↓                              → data/articles-titles.txt (one title per line, for AI)
+    ↓
+Claude reads articles-titles.txt → Generates analysis JSON (analysis-only)
+    ↓
+gen-briefing script assembles   → analysis + slim → data/briefing.json
+    ↓
+scripts/render-html.mjs  → briefing JSON + articles-slim.json → output/latest.html
+scripts/render-md.mjs    → briefing JSON + articles-slim.json → output/latest.md
+scripts/manage-opml.mjs  → Manage RSS subscriptions (add/list/remove)
 ```
 
-## 快速开始
+## File Locations
 
-### 1. 初始化配置
+- `{baseDir}/feeds.opml` — RSS subscription source-of-truth
+- `{baseDir}/data/articles.json` — fetched article cache
+- `{baseDir}/output/latest.html` — generated HTML report
+- `{baseDir}/output/latest.md` — generated Markdown report
+- `{baseDir}/output/archive/` — timestamped snapshots
 
-```bash
-news-push init
+## Workflow
+
+### Default: `/news-push` (Markdown output)
+
+1. Run `node {baseDir}/scripts/sync-feeds.mjs` to fetch RSS articles into `data/articles.json`
+2. Run `node {baseDir}/scripts/preprocess-articles.mjs` to generate `data/articles-slim.json` + `data/articles-titles.txt`
+3. Read `{baseDir}/data/articles-titles.txt` (one title per line, minimal tokens)
+4. Generate an **analysis JSON** using your own AI capabilities (see schema below)
+5. Write the analysis JSON to `{baseDir}/data/analysis.json` (use temp .mjs with `JSON.stringify`)
+6. Run the gen-briefing script to assemble `{baseDir}/data/briefing.json` from analysis + slim
+7. Run `node {baseDir}/scripts/render-md.mjs {baseDir}/data/briefing.json`
+8. Show the user the output path
+
+### HTML output
+
+Same as above, but step 5 uses: `node {baseDir}/scripts/render-html.mjs {baseDir}/data/briefing.json`, then run `open {baseDir}/output/latest.html` to open in browser.
+
+### Both formats
+
+Run both render scripts after generating the briefing JSON. After rendering, run `open {baseDir}/output/latest.html` to open the HTML report in browser.
+
+### Manage subscriptions
+
+- List: `node {baseDir}/scripts/manage-opml.mjs list`
+- Add: `node {baseDir}/scripts/manage-opml.mjs add "Feed Name" "https://example.com/feed.xml"`
+- Remove: `node {baseDir}/scripts/manage-opml.mjs remove "Feed Name"`
+
+## Analysis JSON Schema (AI output)
+
+The AI reads `articles-titles.txt` (one title per line) and generates an analysis JSON with **only the analytical content**. Metadata (raw_articles, coverage, timestamps) is assembled by the gen-briefing script.
+
+```json
+{
+  "global_brief": "1-3 sentence summary of the most important developments",
+  "domain_briefs": {
+    "<domain_key>": "domain summary (1-2 sentences)",
+    "...": "2-5 domains, dynamically chosen based on actual content"
+  },
+  "highlight_facts": [
+    {
+      "title": "Concise fact title",
+      "summary": "Fact with inline source attribution, e.g. 「OpenAI released o3 (OpenAI Blog, The Verge)」",
+      "domain": "<domain_key>",
+      "score": 9.0
+    }
+  ],
+  "highlight_opinions": [
+    {
+      "title": "Opinion title",
+      "summary": "Opinion summary with attribution",
+      "domain": "<domain_key>",
+      "score": 7.0
+    }
+  ]
+}
 ```
 
-该命令会：
-- 生成加密密钥
-- 创建配置文件 `.env`
-- 配置邮箱服务（SMTP）
-- 配置AI服务（可选）
-- 创建数据库和用户
+### Domain Classification Rules
 
-### 2. 添加新闻源
+Domain keys are **dynamic** — you decide the domains based on actual article content. Use English keys, render scripts will map to Chinese labels.
 
-```bash
-news-push source add
-```
+Common domain keys (not exhaustive, add as needed): `ai`, `finance`, `politics`, `tech`, `society`, `health`, `entertainment`, `sports`, `science`, `security`.
 
-支持添加RSS、Atom、JSON Feed等格式的新闻源。
+Rules:
+1. Choose **2-5 domains** that best cover the current batch of articles. Skip domains with no significant content.
+2. Use **lowercase English** keys (e.g. `ai`, not `AI`).
+3. Every fact/opinion must have a `domain` matching one of the domain_briefs keys, or `general`.
 
-### 3. 添加过滤器
+### Generation Rules
 
-```bash
-news-push filter add
-```
+1. **Distinguish facts from opinions.** Facts = verifiable events. Opinions = analysis/commentary.
+2. **Merge facts** about the same event into one entry. **Do not merge opinions.**
+3. **Inline source attribution** in summaries: `「fact（Source A, Source B）」` — you only see titles (no source names), so infer from content context (e.g. "IT之家", "Ars Technica", "TechCrunch").
+4. **Be conservative.** If something cannot be confirmed, mark it as 「仍待确认」.
+5. **Max 6 items** each for `highlight_facts` and `highlight_opinions`.
+6. **Score** each item 1-10 based on importance and reliability.
+7. **Output JSON only**, no Markdown wrapping.
+8. **No metadata** — raw_articles, coverage, timestamps are assembled by the gen-briefing script, not by you.
 
-支持关键词、正则表达式、AI分类等过滤方式。
+## Guardrails
 
-### 4. 手动发送测试
+- Confirm before deleting subscriptions
+- Keep generated artifacts local and directly openable
+- Facts stay conservative and source-attributed
+- Keep the raw feed visible in time order
+- No web server, no Flask, no live routes
 
-```bash
-news-push send run
-```
+## Anti-Patterns
 
-立即执行一次新闻获取和发送。
-
-### 5. 设置定时任务
-
-```bash
-news-push cron setup
-```
-
-配置自动定时推送任务。
-
-## 命令参考
-
-### 全局选项
-
-```bash
-news-push --version    # 显示版本信息
-news-push --help       # 显示帮助信息
-```
-
-### init - 初始化
-
-```bash
-news-push init
-```
-
-### source - 新闻源管理
-
-```bash
-news-push source add              # 添加新闻源
-news-push source list             # 列出所有新闻源
-news-push source update <id>      # 更新新闻源
-news-push source remove <id>      # 删除新闻源
-news-push source test <id>        # 测试新闻源连接
-```
-
-### filter - 过滤器管理
-
-```bash
-news-push filter add              # 添加过滤器
-news-push filter list             # 列出所有过滤器
-news-push filter update <id>      # 更新过滤器
-news-push filter remove <id>      # 删除过滤器
-news-push filter test <id>        # 测试过滤器规则
-```
-
-### send - 发送管理
-
-```bash
-news-push send run                # 立即执行新闻推送
-news-push send preview            # 预览即将发送的内容
-news-push send history [--limit N] # 查看发送历史
-news-push send test               # 发送测试邮件
-```
-
-### cron - 定时任务
-
-```bash
-news-push cron setup              # 设置定时任务
-news-push cron list               # 列出定时任务
-news-push cron status             # 查看定时任务状态
-news-push cron remove             # 移除定时任务
-```
-
-## 配置文件
-
-### .env 配置项
-
-```bash
-# 加密密钥（自动生成）
-NEWS_PUSH_ENCRYPTION_KEY=your_encryption_key_here
-
-# 数据库路径
-NEWS_PUSH_DB_PATH=news_push.db
-
-# 日志级别
-LOG_LEVEL=INFO
-```
-
-## 数据库结构
-
-- **users**: 用户配置（邮箱、SMTP、AI配置）
-- **sources**: 新闻源配置（URL、类型、抓取间隔）
-- **filters**: 过滤器规则（类型、规则、动作）
-- **articles**: 抓取的文章（标题、内容、URL）
-- **sent_history**: 发送历史记录
-
-## 安全说明
-
-- 所有敏感信息（SMTP密码、API密钥）都使用Fernet加密存储
-- 加密密钥保存在 `.env` 文件中，请妥善保管
-- 建议定期备份数据库和配置文件
-
-## 开发状态
-
-**当前版本**: 0.1.0
-
-**已实现**:
-- [x] 数据模型和数据库层
-- [x] 加密存储
-- [x] CLI框架和初始化命令
-
-**开发中**:
-- [ ] 新闻源抓取模块
-- [ ] 过滤器引擎
-- [ ] 邮件发送模块
-- [ ] 定时任务管理
-- [ ] AI分类和摘要
-
-## 依赖
-
-- SQLAlchemy 2.0+
-- Click 8.1+
-- Rich 13.7+
-- cryptography 41.0+
-- feedparser 6.0+
-- requests 2.31+
-- beautifulsoup4 4.12+
-- playwright 1.40+
-- jinja2 3.1+
-
-## 许可证
-
-MIT License
-
-## 贡献
-
-欢迎提交Issue和Pull Request！
+- Calling external AI APIs (you ARE the AI)
+- Reintroducing any web server dependency
+- Asking the user to type long flag-heavy commands
+- Hiding the raw feed behind summaries only
+- Writing output only to stdout without saving a durable file
+- Introducing npm dependencies
