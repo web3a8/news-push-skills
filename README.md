@@ -43,26 +43,6 @@ git clone https://github.com/web3a8/news-push-skills.git ~/.claude/skills/news-p
 /news-push
 ```
 
-### 生成 HTML 简报
-
-```
-生成 HTML 格式的新闻简报
-```
-
-### 同时生成两种格式
-
-```
-同时生成 Markdown 和 HTML 格式的简报
-```
-
-### 管理订阅源
-
-```
-查看当前订阅源
-添加订阅源 "名称" "https://example.com/feed.xml"
-删除订阅源 "名称"
-```
-
 ## 输出示例
 
 生成的 HTML 简报包含以下板块：
