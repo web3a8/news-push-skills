@@ -33,6 +33,16 @@ function clip(text, limit = 220) {
   return text.slice(0, limit - 1).trim() + "…";
 }
 
+function stripUpgradeTag(text) {
+  return (text || "").replace(/【focus_on】/g, "").trim();
+}
+
+function applyUpgradeUnderline(text) {
+  if (!text) return "";
+  // Replace 【focus_on】text-up-to-semicolon with underlined span
+  return text.replace(/【focus_on】([^；]+)/g, '<span class="upgrade-tag">$1</span>');
+}
+
 function formatTimestamp(value) {
   if (!value) return "未知";
   try {
@@ -73,9 +83,8 @@ function renderHtml(briefing) {
 
   const domainColumns = DOMAIN_ORDER.map((domain) => {
     const label = DOMAIN_LABELS[domain] || domain;
-    const briefText = escapeHtml(
-      (briefing.domain_briefs || {})[domain] || ""
-    );
+    const rawBrief = (briefing.domain_briefs || {})[domain] || "";
+    const briefText = applyUpgradeUnderline(escapeHtml(rawBrief));
     return `
           <div class="domain-col">
             <h3>${label}</h3>
@@ -192,6 +201,12 @@ function renderHtml(briefing) {
       }
       a { color: var(--accent); text-decoration: none; }
       a:hover { text-decoration: underline; }
+      .upgrade-tag {
+        text-decoration: underline;
+        text-decoration-color: var(--accent);
+        text-underline-offset: 3px;
+        text-decoration-thickness: 2px;
+      }
     </style>
   </head>
   <body>

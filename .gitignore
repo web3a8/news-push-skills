@@ -11,6 +11,9 @@ data/articles-titles.txt
 data/analysis.json
 data/briefing.json
 
+# User-specific focus config
+data/focus.yaml
+
 # OS
 .DS_Store
 *.log

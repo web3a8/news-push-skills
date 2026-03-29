@@ -41,6 +41,10 @@ function fileTimestamp(value) {
   }
 }
 
+function stripUpgradeTag(text) {
+  return (text || "").replace(/【focus_on】/g, "").trim();
+}
+
 // ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
@@ -67,13 +71,13 @@ function renderMd(briefing) {
 
   // Global brief
   lines.push("## 今日最重要几件事\n");
-  lines.push(`${briefing.global_brief || "本期暂无高信号更新。"}\n`);
+  lines.push(`${stripUpgradeTag(briefing.global_brief || "本期暂无高信号更新。")}\n`);
 
   // Domain briefs
   lines.push("## 分栏简报\n");
   for (const domain of DOMAIN_ORDER) {
     const label = DOMAIN_LABELS[domain] || domain;
-    const text = (briefing.domain_briefs || {})[domain] || "本期暂无高信号更新。";
+    const text = stripUpgradeTag((briefing.domain_briefs || {})[domain] || "本期暂无高信号更新。");
     lines.push(`### ${label}\n`);
     lines.push(`${text}\n`);
   }
@@ -86,7 +90,7 @@ function renderMd(briefing) {
   } else {
     for (const fact of facts) {
       const domain = DOMAIN_LABELS[fact.domain] || "综合";
-      lines.push(`### ${fact.title || "未命名条目"}\n`);
+      lines.push(`### ${stripUpgradeTag(fact.title || "未命名条目")}\n`);
       lines.push(`- 领域：${domain}`);
       lines.push(`- 分数：${Number(fact.score || 0).toFixed(2)}\n`);
       lines.push(`${(fact.summary || "").trim()}\n`);
@@ -101,7 +105,7 @@ function renderMd(briefing) {
   } else {
     for (const op of opinions) {
       const domain = DOMAIN_LABELS[op.domain] || "综合";
-      lines.push(`### ${op.title || "未命名条目"}\n`);
+      lines.push(`### ${stripUpgradeTag(op.title || "未命名条目")}\n`);
       lines.push(`- 领域：${domain}`);
       lines.push(`- 分数：${Number(op.score || 0).toFixed(2)}\n`);
       lines.push(`${(op.summary || "").trim()}\n`);

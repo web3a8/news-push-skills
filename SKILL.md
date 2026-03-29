@@ -52,11 +52,12 @@ scripts/manage-opml.mjs  → Manage RSS subscriptions (add/list/remove)
 1. Run `node {baseDir}/scripts/sync-feeds.mjs` to fetch RSS articles into `data/articles.json`
 2. Run `node {baseDir}/scripts/preprocess-articles.mjs` to generate `data/articles-slim.json` + `data/articles-titles.txt`
 3. Read `{baseDir}/data/articles-titles.txt` (one title per line, minimal tokens)
-4. Generate an **analysis JSON** using your own AI capabilities (see schema below)
-5. Write the analysis JSON to `{baseDir}/data/analysis.json` (use temp .mjs with `JSON.stringify`)
-6. Run the gen-briefing script to assemble `{baseDir}/data/briefing.json` from analysis + slim
-7. Run `node {baseDir}/scripts/render-md.mjs {baseDir}/data/briefing.json`
-8. Show the user the output path
+4. **If `{baseDir}/data/focus.yaml` exists**, read it and apply the user's focus preferences during analysis (see Focus Integration below)
+5. Generate an **analysis JSON** using your own AI capabilities (see schema below)
+6. Write the analysis JSON to `{baseDir}/data/analysis.json` (use temp .mjs with `JSON.stringify`)
+7. Run the gen-briefing script to assemble `{baseDir}/data/briefing.json` from analysis + slim
+8. Run `node {baseDir}/scripts/render-md.mjs {baseDir}/data/briefing.json`
+9. Show the user the output path
 
 ### HTML output
 
@@ -116,6 +117,19 @@ Rules:
 ### Generation Rules
 
 1. **Distinguish facts from opinions.** Facts = verifiable events. Opinions = analysis/commentary.
+
+### Focus Integration
+
+If `{baseDir}/data/focus.yaml` exists, read it before generating analysis. Apply these rules:
+
+- **domains 权重**: When selecting highlight items, prefer articles in high-weight domains (e.g. `ai: 9` means AI articles should appear more often and score higher). Low-weight domains (1-3) should only appear if the event is extremely significant.
+- **keywords_boost**: Articles whose titles match these keywords should be prioritized — include them in highlights even if they wouldn't otherwise make the top 6.
+- **keywords_ignore**: Articles whose titles match these keywords should be deprioritized — only include if truly groundbreaking.
+- **extra_instruction**: Apply this as an additional editorial bias when choosing which items to highlight.
+- If focus.yaml does NOT exist, proceed with neutral/default weighting — no bias.
+
+**Focus tagging**: When an item in `domain_briefs` matches the user's focus.yaml priorities (boosted keywords, high-weight domains, extra_instruction topics), prepend `【focus_on】` before the relevant text. For example: `【focus_on】Anthropic Claude 新模型曝光；普通新闻...`. Use **only** the fixed tag `【focus_on】` — no other tag names. The render scripts apply underline styling to text following this exact tag and strip the tag itself from output.
+
 2. **Merge facts** about the same event into one entry. **Do not merge opinions.**
 3. **Inline source attribution** in summaries: `「fact（Source A, Source B）」` — you only see titles (no source names), so infer from content context (e.g. "IT之家", "Ars Technica", "TechCrunch").
 4. **Be conservative.** If something cannot be confirmed, mark it as 「仍待确认」.
