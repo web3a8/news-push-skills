@@ -10,8 +10,9 @@ data/articles-slim.json
 data/articles-titles.txt
 data/analysis.json
 data/briefing.json
+data/_write_analysis.mjs
 
-# User-specific focus config
+# User-specific config
 data/focus.yaml
 
 # OS
