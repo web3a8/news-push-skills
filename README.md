@@ -116,7 +116,7 @@ news-push/
 ├── README.md                # 项目文档
 ├── LICENSE                  # MIT 许可证
 ├── .gitignore
-├── feeds.opml               # RSS 订阅源（内置 10 个示例源）
+├── feeds.opml               # RSS 订阅源（内置 160+ 精选源）
 ├── scripts/
 │   ├── sync-feeds.mjs       # RSS 抓取
 │   ├── preprocess-articles.mjs  # 文章预处理 & 去噪
