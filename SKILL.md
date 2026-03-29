@@ -99,7 +99,11 @@ The AI reads `articles-titles.txt` (one title per line) and generates an analysi
       "domain": "<domain_key>",
       "score": 7.0
     }
-  ]
+  ],
+  "title_translations": {
+    "English Title Here": "这里是对应的中文翻译",
+    "Another English Title": "另一个中文翻译"
+  }
 }
 ```
 
@@ -117,6 +121,7 @@ Rules:
 ### Generation Rules
 
 1. **Distinguish facts from opinions.** Facts = verifiable events. Opinions = analysis/commentary.
+2. **Translate English titles.** Add a `title_translations` field mapping English article titles → Chinese. Skip titles already in Chinese. Keep translations concise (suitable for scanning, not literary translation). Example: `"From 300KB to 69KB per Token: How LLM Architectures Solve the KV Cache Problem" → "从 300KB 到 69KB：LLM 架构如何解决 KV 缓存问题"`.
 
 ### Focus Integration
 

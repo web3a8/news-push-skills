@@ -67,7 +67,7 @@ function renderMd(briefing) {
 
   // Header
   lines.push("# News Push\n");
-  lines.push(`> 生成时间：${createdAt} · 覆盖源数：${coverage.sources_count || 0} · 处理文章：${coverage.articles_count || 0}\n`);
+  lines.push(`> 生成时间：${createdAt} · 处理文章：${coverage.articles_count || 0}\n`);
 
   // Global brief
   lines.push("## 今日最重要几件事\n");
@@ -125,8 +125,12 @@ function renderMd(briefing) {
   } else {
     for (const a of rawArticles) {
       const pubDate = formatTimestamp(a.date);
-      lines.push(`### [${a.title}](${a.link})\n`);
+      const displayTitle = a.title_cn || a.title;
+      lines.push(`### [${displayTitle}](${a.link})\n`);
       lines.push(`${a.source || "未知来源"} · ${pubDate}\n`);
+      if (a.title_cn) {
+        lines.push(`<small>${a.title}</small>\n`);
+      }
       if (a.desc) {
         const clipped = a.desc.length > 220 ? a.desc.slice(0, 219).trim() + "…" : a.desc;
         if (clipped) lines.push(`> ${clipped}\n`);

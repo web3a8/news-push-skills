@@ -142,7 +142,7 @@ function parseFeed(xml) {
 /**
  * Fetch a single feed URL, return parsed articles or empty array on error.
  */
-async function fetchFeed(name, url, timeoutMs = 5000) {
+async function fetchFeed(name, url, timeoutMs = 15000) {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);

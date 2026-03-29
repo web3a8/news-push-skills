@@ -54,6 +54,17 @@ function main() {
     },
   };
 
+  // Merge title translations into slim articles
+  const translations = analysis.title_translations || {};
+  if (Object.keys(translations).length > 0 && slim.length > 0) {
+    for (const a of slim) {
+      if (translations[a.title]) {
+        a.title_cn = translations[a.title];
+      }
+    }
+    writeFileSync(SLIM_PATH, JSON.stringify(slim, null, 2), "utf-8");
+  }
+
   writeFileSync(BRIEFING_PATH, JSON.stringify(briefing, null, 2), "utf-8");
   console.log(`✓ Briefing 已生成: ${sources.size} 个源 · ${slim.length} 篇文章`);
 }
