@@ -11,12 +11,10 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { getRuntimePaths } from "../lib/runtime-paths.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const SKILL_ROOT = resolve(__dirname, "..");
-const OPML_PATH = resolve(SKILL_ROOT, "feeds.opml");
+const PATHS = getRuntimePaths();
+const OPML_PATH = PATHS.feedsPath;
 
 // ---------------------------------------------------------------------------
 // OPML parsing helpers

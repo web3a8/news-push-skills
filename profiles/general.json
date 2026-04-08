@@ -1,0 +1,15 @@
+{
+  "name": "综合早报",
+  "sources": {
+    "include": [],
+    "exclude": []
+  },
+  "extras": {
+    "github_trending": true,
+    "weibo_hot": true,
+    "hf_papers": true,
+    "wallstreetcn": true,
+    "v2ex_hot": true
+  },
+  "deep_fetch": { "enabled": true, "limit": 20 }
+}

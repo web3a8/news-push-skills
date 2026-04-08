@@ -1,0 +1,15 @@
+{
+  "name": "科技早报",
+  "sources": {
+    "include": ["Hacker News", "GitHub", "Dev.to", "Product Hunt", "TechCrunch", "Ars Technica", "V2EX", "博客园", "CSDN"],
+    "exclude": ["体育", "娱乐", "时尚"]
+  },
+  "extras": {
+    "github_trending": true,
+    "weibo_hot": false,
+    "hf_papers": true,
+    "wallstreetcn": false,
+    "v2ex_hot": true
+  },
+  "deep_fetch": { "enabled": true, "limit": 15 }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "AI 深度",
+  "sources": {
+    "include": ["AI", "LLM", "arXiv", "Hugging", "OpenAI", "DeepMind", "Anthropic", "Hacker News", "Machine Learning", "NLP"],
+    "exclude": ["体育", "娱乐", "汽车"]
+  },
+  "extras": {
+    "github_trending": true,
+    "weibo_hot": false,
+    "hf_papers": true,
+    "wallstreetcn": false,
+    "v2ex_hot": false
+  },
+  "deep_fetch": { "enabled": true, "limit": 15 }
+}

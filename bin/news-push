@@ -1,0 +1,7 @@
+#!/usr/bin/env node
+
+import("../cli/main.mjs").catch((error) => {
+  console.error(error?.stack || String(error));
+  process.exit(1);
+});
+

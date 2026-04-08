@@ -1,0 +1,15 @@
+{
+  "name": "财经早报",
+  "sources": {
+    "include": ["华尔街见闻", "36氪", "腾讯", "东方财富", "雪球", "Bloomberg", "Reuters", "CNBC", "IT之家"],
+    "exclude": ["体育", "游戏"]
+  },
+  "extras": {
+    "github_trending": false,
+    "weibo_hot": true,
+    "hf_papers": false,
+    "wallstreetcn": true,
+    "v2ex_hot": false
+  },
+  "deep_fetch": { "enabled": true, "limit": 15 }
+}

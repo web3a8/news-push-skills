@@ -16,14 +16,12 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { getRuntimePaths } from "../lib/runtime-paths.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const SKILL_ROOT = resolve(__dirname, "..");
-const ANALYSIS_PATH = resolve(SKILL_ROOT, "data", "analysis.json");
-const SLIM_PATH = resolve(SKILL_ROOT, "data", "articles-slim.json");
-const BRIEFING_PATH = resolve(SKILL_ROOT, "data", "briefing.json");
+const PATHS = getRuntimePaths();
+const ANALYSIS_PATH = PATHS.analysisPath;
+const SLIM_PATH = PATHS.slimArticlesPath;
+const BRIEFING_PATH = PATHS.briefingPath;
 
 function main() {
   // Read AI analysis

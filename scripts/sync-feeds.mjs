@@ -10,13 +10,12 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
+import { getRuntimePaths } from "../lib/runtime-paths.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const SKILL_ROOT = resolve(__dirname, "..");
-const DEFAULT_OPML = resolve(SKILL_ROOT, "feeds.opml");
-const DEFAULT_OUT = resolve(SKILL_ROOT, "data", "articles.json");
+const PATHS = getRuntimePaths();
+const DEFAULT_OPML = PATHS.feedsPath;
+const DEFAULT_OUT = PATHS.articlesPath;
 
 // ---------------------------------------------------------------------------
 // OPML parsing

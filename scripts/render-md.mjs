@@ -12,13 +12,12 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+import { getRuntimePaths } from "../lib/runtime-paths.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const SKILL_ROOT = resolve(__dirname, "..");
-const DEFAULT_OUT_DIR = resolve(SKILL_ROOT, "output");
-const SLIM_PATH = resolve(SKILL_ROOT, "data", "articles-slim.json");
+const PATHS = getRuntimePaths();
+const DEFAULT_OUT_DIR = PATHS.outputDir;
+const SLIM_PATH = PATHS.slimArticlesPath;
 
 function formatTimestamp(value) {
   if (!value) return "未知";

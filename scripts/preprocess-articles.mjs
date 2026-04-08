@@ -14,12 +14,11 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { getRuntimePaths } from "../lib/runtime-paths.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const SKILL_ROOT = resolve(__dirname, "..");
-const DEFAULT_IN = resolve(SKILL_ROOT, "data", "articles.json");
-const DEFAULT_OUT = resolve(SKILL_ROOT, "data", "articles-slim.json");
+const PATHS = getRuntimePaths();
+const DEFAULT_IN = PATHS.articlesPath;
+const DEFAULT_OUT = PATHS.slimArticlesPath;
 
 // ---------------------------------------------------------------------------
 // HTML stripping & text cleanup
@@ -157,6 +156,7 @@ function processArticles(raw) {
       desc,
       date: a.pubDate || "",
       source: a.source_name || "",
+      content: a.content || "",
     });
   }
 

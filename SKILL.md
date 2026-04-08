@@ -1,11 +1,23 @@
 ---
 name: news-push
-description: Generate a local news intelligence report from RSS subscriptions. Use when the user wants `/news-push`, Markdown output, static HTML output, RSS subscription management in OPML, or a lightweight CLI-first news workflow without any web server.
+description: Generate a local news briefing from RSS / OPML subscriptions. Use when the user asks to 根据 RSS、订阅源或 OPML 生成新闻简报、新闻早报、每日摘要、本地 Markdown/HTML 报告，管理 RSS 订阅，或运行一个 CLI-first 的本地新闻工作流； prefer this skill for feed-based briefings, not generic web news search.
 ---
 
 IRON LAW: Do not introduce or rely on a web server. `news-push` must stay CLI-first and produce local files the user can open directly. Zero external dependencies — all scripts use only Node.js built-in modules.
 
 # News Push
+
+## Natural Language Triggers
+
+Use this skill when the user asks for a briefing built from their feeds, subscriptions, or OPML, for example:
+
+- “根据我的 RSS 订阅生成今天的新闻简报”
+- “把订阅源整理成一份本地 Markdown 新闻摘要”
+- “生成一份按领域分类的新闻早报”
+- “帮我把这个 RSS 加进 OPML，然后重新生成简报”
+- “用本地订阅源输出一个 HTML 新闻报告”
+
+Do **not** prefer this skill when the user is asking for generic latest news from the web with no RSS / subscription / OPML context.
 
 ## Purpose
 
@@ -20,58 +32,88 @@ Turn RSS subscriptions into a lightweight local briefing with:
 ## Architecture
 
 ```
-SKILL.md (this file) → Claude reads and executes
+Claude runs a stable CLI entrypoint:
     ↓
-scripts/sync-feeds.mjs         → Fetch RSS → data/articles.json
+bin/news-push --workspace "$PWD"
     ↓
-scripts/preprocess-articles.mjs → Strip HTML, truncate, filter noise
-    ↓                              → data/articles-slim.json (full metadata, for render)
-    ↓                              → data/articles-titles.txt (one title per line, for AI)
+cli/main.mjs
     ↓
-Claude reads articles-titles.txt → Generates analysis JSON (analysis-only)
+prepare phase:
+  scripts/sync-feeds.mjs
+  scripts/sync-extras.mjs
+  scripts/apply-profile.mjs (optional)
+  scripts/fetch-content.mjs
+  scripts/preprocess-articles.mjs
     ↓
-gen-briefing script assembles   → analysis + slim → data/briefing.json
+workspace/.news-push/data/articles-titles.txt
     ↓
-scripts/render-html.mjs  → briefing JSON + articles-slim.json → output/latest.html
-scripts/render-md.mjs    → briefing JSON + articles-slim.json → output/latest.md
-scripts/manage-opml.mjs  → Manage RSS subscriptions (add/list/remove)
+Claude reads titles + generates analysis JSON
+    ↓
+workspace/.news-push/data/analysis.json
+    ↓
+bin/news-push --workspace "$PWD"   (same command, second pass)
+    ↓
+finalize phase:
+  scripts/gen-briefing.mjs
+  scripts/render-md.mjs / scripts/render-html.mjs
+  scripts/send-email.mjs (optional)
+  scripts/manage-opml.mjs (feeds subcommands)
 ```
 
 ## File Locations
 
-- `{baseDir}/feeds.opml` — RSS subscription source-of-truth
-- `{baseDir}/data/articles.json` — fetched article cache
-- `{baseDir}/output/latest.html` — generated HTML report
-- `{baseDir}/output/latest.md` — generated Markdown report
-- `{baseDir}/output/archive/` — timestamped snapshots
+- `{baseDir}/feeds.opml` — bundled default subscription template (read-only seed)
+- `{workspace}/.news-push/feeds.opml` — user/workspace subscription source-of-truth
+- `{workspace}/.news-push/data/articles.json` — fetched article cache
+- `{workspace}/.news-push/data/articles-titles.txt` — one title per line for AI analysis
+- `{workspace}/.news-push/data/analysis.json` — Claude-generated analysis JSON
+- `{workspace}/.news-push/output/latest.html` — generated HTML report
+- `{workspace}/.news-push/output/latest.md` — generated Markdown report
+- `{workspace}/.news-push/output/archive/` — timestamped snapshots
+- `{workspace}/.news-push/.env` — email sending config (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_TO)
+
+## Authorization-Friendly Runtime
+
+To reduce repeated permission prompts, prefer the stable CLI entrypoint instead of calling many scripts one by one.
+
+- Always execute `bin/news-push` from the skill directory
+- Always pass `--workspace "$PWD"` so runtime files stay in the user's current project
+- Prefer calling the same default `news-push` command twice around the AI analysis step, rather than issuing a long chain of shell commands
+- Do **not** write runtime artifacts back into the installed skill directory unless the user explicitly asks for that behavior
 
 ## Workflow
 
 ### Default: `/news-push` (Markdown output)
 
-1. Run `node {baseDir}/scripts/sync-feeds.mjs` to fetch RSS articles into `data/articles.json`
-2. Run `node {baseDir}/scripts/preprocess-articles.mjs` to generate `data/articles-slim.json` + `data/articles-titles.txt`
-3. Read `{baseDir}/data/articles-titles.txt` (one title per line, minimal tokens)
-4. **If `{baseDir}/data/focus.yaml` exists**, read it and apply the user's focus preferences during analysis (see Focus Integration below)
-5. Generate an **analysis JSON** using your own AI capabilities (see schema below)
-6. Write the analysis JSON to `{baseDir}/data/analysis.json` (use temp .mjs with `JSON.stringify`)
-7. Run the gen-briefing script to assemble `{baseDir}/data/briefing.json` from analysis + slim
-8. Run `node {baseDir}/scripts/render-md.mjs {baseDir}/data/briefing.json`
-9. Show the user the output path
+1. Run `node {baseDir}/bin/news-push --workspace "$PWD" --format md`
+2. If the CLI reports that prepare is complete, read `{workspace}/.news-push/data/articles-titles.txt`
+3. **If `{workspace}/.news-push/data/focus.yaml` exists and has a `preference` field**, read it and apply the user's natural language preferences during analysis (see Focus Integration below)
+4. Generate an **analysis JSON** using your own AI capabilities (see schema below)
+5. Write the analysis JSON to `{workspace}/.news-push/data/analysis.json`
+6. Run the **same command again**: `node {baseDir}/bin/news-push --workspace "$PWD" --format md`
+7. Show the user `{workspace}/.news-push/output/latest.md`
 
 ### HTML output
 
-Same as above, but step 5 uses: `node {baseDir}/scripts/render-html.mjs {baseDir}/data/briefing.json`, then run `open {baseDir}/output/latest.html` to open in browser.
+Same flow, but use `node {baseDir}/bin/news-push html --workspace "$PWD"`. After analysis is written, run the same command again and show `{workspace}/.news-push/output/latest.html`.
+
+### Email output (auto-send)
+
+If `.env` is configured with `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, and `EMAIL_TO`, the email sending step is appended automatically after rendering:
+
+Run `node {baseDir}/bin/news-push finalize --workspace "$PWD" --format html --email`
+
+If `.env` does not exist or lacks required variables, skip silently (no error, no prompt).
 
 ### Both formats
 
-Run both render scripts after generating the briefing JSON. After rendering, run `open {baseDir}/output/latest.html` to open the HTML report in browser.
+Use `node {baseDir}/bin/news-push both --workspace "$PWD"` before and after the analysis step.
 
 ### Manage subscriptions
 
-- List: `node {baseDir}/scripts/manage-opml.mjs list`
-- Add: `node {baseDir}/scripts/manage-opml.mjs add "Feed Name" "https://example.com/feed.xml"`
-- Remove: `node {baseDir}/scripts/manage-opml.mjs remove "Feed Name"`
+- List: `node {baseDir}/bin/news-push feeds list --workspace "$PWD"`
+- Add: `node {baseDir}/bin/news-push feeds add "Feed Name" "https://example.com/feed.xml" --workspace "$PWD"`
+- Remove: `node {baseDir}/bin/news-push feeds remove "Feed Name" --workspace "$PWD"`
 
 ## Analysis JSON Schema (AI output)
 
@@ -125,15 +167,17 @@ Rules:
 
 ### Focus Integration
 
-If `{baseDir}/data/focus.yaml` exists, read it before generating analysis. Apply these rules:
+If `{baseDir}/data/focus.yaml` exists and has a non-empty `preference` field, read it before generating analysis. The preference is a **natural language string** — interpret it holistically to decide which articles to prioritize, deprioritize, or highlight.
 
-- **domains 权重**: When selecting highlight items, prefer articles in high-weight domains (e.g. `ai: 9` means AI articles should appear more often and score higher). Low-weight domains (1-3) should only appear if the event is extremely significant.
-- **keywords_boost**: Articles whose titles match these keywords should be prioritized — include them in highlights even if they wouldn't otherwise make the top 6.
-- **keywords_ignore**: Articles whose titles match these keywords should be deprioritized — only include if truly groundbreaking.
-- **extra_instruction**: Apply this as an additional editorial bias when choosing which items to highlight.
-- If focus.yaml does NOT exist, proceed with neutral/default weighting — no bias.
+Apply these rules:
 
-**Focus tagging**: When an item in `domain_briefs` matches the user's focus.yaml priorities (boosted keywords, high-weight domains, extra_instruction topics), prepend `【focus_on】` before the relevant text. For example: `【focus_on】Anthropic Claude 新模型曝光；普通新闻...`. Use **only** the fixed tag `【focus_on】` — no other tag names. The render scripts apply underline styling to text following this exact tag and strip the tag itself from output.
+- Read the `preference` text and **infer** what domains, topics, and keywords the user cares about most.
+- When selecting highlight items, **weight articles** that match the inferred priorities higher. Articles matching deprioritized topics should only appear if truly groundbreaking.
+- When the user mentions specific companies, products, or events (e.g. "OpenAI", "Anthropic", "product launches"), treat those as **boost keywords**.
+- When the user mentions topics they don't care about (e.g. "不太关心汽车"), treat those as **ignore keywords**.
+- If focus.yaml does NOT exist or has an empty preference, proceed with neutral/default weighting — no bias.
+
+**Focus tagging**: When an item in `domain_briefs` matches the user's inferred priorities from the preference text, prepend `【focus_on】` before the relevant text. For example: `【focus_on】Anthropic Claude 新模型曝光；普通新闻...`. Use **only** the fixed tag `【focus_on】` — no other tag names. The render scripts apply underline styling to text following this exact tag and strip the tag itself from output.
 
 2. **Merge facts** about the same event into one entry. **Do not merge opinions.**
 3. **Inline source attribution** in summaries: `「fact（Source A, Source B）」` — you only see titles (no source names), so infer from content context (e.g. "IT之家", "Ars Technica", "TechCrunch").
@@ -142,6 +186,27 @@ If `{baseDir}/data/focus.yaml` exists, read it before generating analysis. Apply
 6. **Score** each item 1-10 based on importance and reliability.
 7. **Output JSON only**, no Markdown wrapping.
 8. **No metadata** — raw_articles, coverage, timestamps are assembled by the gen-briefing script, not by you.
+
+## Profiles
+
+Select a profile to focus the briefing on specific domains:
+
+```bash
+node {baseDir}/bin/news-push prepare --workspace "$PWD" --profile ai
+node {baseDir}/bin/news-push --workspace "$PWD" --profile ai
+```
+
+Available profiles in `{baseDir}/profiles/`:
+
+| Profile | Focus | Non-RSS Extras |
+|---|---|---|
+| `general` | 综合早报 (全部源) | All extras enabled |
+| `tech` | 科技早报 (HN, GitHub, Dev.to, PH) | GitHub Trending, HF Papers, V2EX |
+| `ai` | AI 深度 (arXiv, HF, OpenAI, DeepMind) | GitHub Trending, HF Papers |
+| `finance` | 财经早报 (华尔街见闻, 36Kr, 腾讯) | 微博热搜, 华尔街见闻 |
+| `social` | 吃瓜早报 (微博, V2EX, 知乎) | 微博热搜, V2EX 热门 |
+
+When a profile is active, the runtime workspace writes `{workspace}/.news-push/data/articles-filtered.json`. Subsequent pipeline steps use that file instead of `articles.json`.
 
 ## Guardrails
 

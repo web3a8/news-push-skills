@@ -11,14 +11,14 @@
 
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { resolve, dirname, extname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve, extname } from "node:path";
 import { exec } from "node:child_process";
+import { getRuntimePaths } from "../lib/runtime-paths.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const SKILL_ROOT = resolve(__dirname, "..");
-const OPML_PATH = resolve(SKILL_ROOT, "feeds.opml");
-const OUTPUT_DIR = resolve(SKILL_ROOT, "output");
+const PATHS = getRuntimePaths();
+const OPML_PATH = PATHS.feedsPath;
+const OUTPUT_DIR = PATHS.outputDir;
+const FOCUS_PATH = PATHS.focusPath;
 const DEFAULT_PORT = 7789;
 
 const MIME_TYPES = {
@@ -87,6 +87,28 @@ function removeFeed(name) {
   if (filtered.length === feeds.length) return false;
   writeFeedsOpml(filtered);
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Focus helpers
+// ---------------------------------------------------------------------------
+
+function readFocus() {
+  if (!existsSync(FOCUS_PATH)) return { preference: "", updated_at: "" };
+  const text = readFileSync(FOCUS_PATH, "utf-8");
+  const prefMatch = text.match(/^preference:\s*["']?(.+?)["']?\s*$/m);
+  const dateMatch = text.match(/^updated_at:\s*["']?(.+?)["']?\s*$/m);
+  return {
+    preference: prefMatch ? prefMatch[1] : "",
+    updated_at: dateMatch ? dateMatch[1] : "",
+  };
+}
+
+function writeFocus(preference) {
+  const updated_at = new Date().toISOString();
+  const yaml = `preference: "${preference.replace(/"/g, '\\"')}"\nupdated_at: "${updated_at}"\n`;
+  writeFileSync(FOCUS_PATH, yaml, "utf-8");
+  return { preference, updated_at };
 }
 
 // ---------------------------------------------------------------------------
@@ -314,6 +336,44 @@ function configPageHtml() {
         color: var(--muted);
       }
 
+      /* Focus */
+      textarea {
+        width: 100%;
+        min-height: 120px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        font-family: inherit;
+        font-size: 0.95rem;
+        background: #fffdf8;
+        color: var(--ink);
+        outline: none;
+        resize: vertical;
+        line-height: 1.6;
+        transition: border-color 0.2s;
+      }
+      textarea:focus { border-color: var(--accent); }
+      textarea::placeholder { color: var(--muted); opacity: 0.7; }
+      .focus-hint {
+        color: var(--muted);
+        font-size: 0.85rem;
+        margin: 8px 0 0;
+        line-height: 1.5;
+      }
+      .focus-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 12px;
+      }
+      .focus-saved {
+        font-size: 0.85rem;
+        color: var(--success);
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .focus-saved.show { opacity: 1; }
+
       /* Toast */
       .toast {
         position: fixed;
@@ -340,12 +400,22 @@ function configPageHtml() {
         <div class="header-row">
           <div>
             <h1>News Push 配置</h1>
-            <p class="meta">管理 RSS 订阅源</p>
+            <p class="meta">管理 RSS 订阅源 · 个性化偏好</p>
           </div>
           <a href="/" class="back-link">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
             返回报告
           </a>
+        </div>
+      </section>
+
+      <section>
+        <h2>个性化偏好</h2>
+        <textarea id="focus-input" placeholder="用自然语言描述你关注的重点，例如：&#10;&#10;我更关注AI和安全领域的新闻，如果有OpenAI或Anthropic的产品升级请重点提示我。不太关心汽车和体育。"></textarea>
+        <p class="focus-hint">AI 引擎会在生成简报时自动理解你的偏好。留空则使用默认权重。</p>
+        <div class="focus-actions">
+          <button type="button" id="focus-save" class="btn-primary">保存偏好</button>
+          <span id="focus-saved" class="focus-saved"></span>
         </div>
       </section>
 
@@ -498,6 +568,40 @@ function configPageHtml() {
 
       // Load
       loadFeeds();
+
+      // Focus: load
+      async function loadFocus() {
+        try {
+          const resp = await fetch("/api/focus");
+          const data = await resp.json();
+          document.getElementById("focus-input").value = data.preference || "";
+        } catch (e) { /* ignore */ }
+      }
+
+      // Focus: save
+      document.getElementById("focus-save").addEventListener("click", async function() {
+        const preference = document.getElementById("focus-input").value.trim();
+        try {
+          const resp = await fetch("/api/focus", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ preference: preference })
+          });
+          const result = await resp.json();
+          if (result.ok) {
+            const saved = document.getElementById("focus-saved");
+            saved.textContent = "\\u2713 已保存，下次生成简报时生效";
+            saved.className = "focus-saved show";
+            setTimeout(() => { saved.className = "focus-saved"; }, 3000);
+          } else {
+            showToast("保存失败", "error");
+          }
+        } catch (e) {
+          showToast("保存失败", "error");
+        }
+      });
+
+      loadFocus();
     </script>
   </body>
 </html>`;
@@ -598,6 +702,26 @@ async function handleRequest(req, res) {
     }
     const result = await testFeed(body.url);
     jsonResponse(res, result);
+    return;
+  }
+
+  // API: Read focus
+  if (pathname === "/api/focus" && req.method === "GET") {
+    jsonResponse(res, readFocus());
+    return;
+  }
+
+  // API: Save focus
+  if (pathname === "/api/focus" && req.method === "PUT") {
+    const body = JSON.parse(await readBody(req));
+    const preference = (body.preference || "").trim();
+    if (!preference) {
+      writeFileSync(FOCUS_PATH, "", "utf-8");
+      jsonResponse(res, { ok: true, preference: "", updated_at: "" });
+      return;
+    }
+    const result = writeFocus(preference);
+    jsonResponse(res, { ok: true, ...result });
     return;
   }
 

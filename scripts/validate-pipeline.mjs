@@ -8,14 +8,13 @@
  */
 
 import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { execSync } from "node:child_process";
+import { getRuntimePaths } from "../lib/runtime-paths.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const SKILL_ROOT = resolve(__dirname, "..");
-const DATA = resolve(SKILL_ROOT, "data");
-const OUTPUT = resolve(SKILL_ROOT, "output");
+const PATHS = getRuntimePaths();
+const DATA = PATHS.dataDir;
+const OUTPUT = PATHS.outputDir;
 
 const rawJson = readFileSync(resolve(DATA, "articles.json"), "utf-8");
 const SLIM = JSON.parse(readFileSync(resolve(DATA, "articles-slim.json"), "utf-8"));

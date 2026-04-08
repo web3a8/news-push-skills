@@ -12,13 +12,12 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+import { getRuntimePaths } from "../lib/runtime-paths.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const SKILL_ROOT = resolve(__dirname, "..");
-const DEFAULT_OUT_DIR = resolve(SKILL_ROOT, "output");
-const SLIM_PATH = resolve(SKILL_ROOT, "data", "articles-slim.json");
+const PATHS = getRuntimePaths();
+const DEFAULT_OUT_DIR = PATHS.outputDir;
+const SLIM_PATH = PATHS.slimArticlesPath;
 
 function escapeHtml(s) {
   return String(s)
@@ -26,6 +25,13 @@ function escapeHtml(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function escapeAttr(s) {
+  return String(s ?? "")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function clip(text, limit = 220) {
@@ -64,6 +70,130 @@ function fileTimestamp(value) {
   }
 }
 
+const SOURCE_CATEGORY_DEFS = [
+  { id: "all", label: "全部" },
+  {
+    id: "ai",
+    label: "AI",
+    patterns: [
+      /arxiv/i,
+      /hugging\s?face/i,
+      /openai/i,
+      /anthropic/i,
+      /google ai/i,
+      /机器学习/,
+      /计算机视觉/,
+      /nlp/i,
+      /\bllm\b/i,
+      /\bai\b/i,
+      /deepmind/i,
+    ],
+  },
+  {
+    id: "finance",
+    label: "财经",
+    patterns: [
+      /华尔街见闻/,
+      /bloomberg/i,
+      /cnbc/i,
+      /financial times/i,
+      /\bwsj\b/i,
+      /经济/,
+      /财经/,
+      /market/i,
+    ],
+  },
+  {
+    id: "tech",
+    label: "科技",
+    patterns: [
+      /techcrunch/i,
+      /ars technica/i,
+      /the verge/i,
+      /mit technology review/i,
+      /smashing magazine/i,
+      /codrops/i,
+      /verge/i,
+      /少数派/,
+    ],
+  },
+  {
+    id: "developers",
+    label: "开发者",
+    patterns: [
+      /github/i,
+      /hacker news/i,
+      /openclaw/i,
+      /dev\.to/i,
+      /this week in rust/i,
+      /aws blog/i,
+      /microsoft/i,
+      /oldnewthing/i,
+      /v2ex/i,
+      /rust/i,
+    ],
+  },
+  {
+    id: "cn-news",
+    label: "中文资讯",
+    patterns: [
+      /微博热搜/,
+      /it之家/,
+      /36kr/i,
+      /腾讯/,
+      /爱范儿/,
+      /虎嗅/,
+      /钛媒体/,
+      /澎湃/,
+    ],
+  },
+  {
+    id: "longread",
+    label: "长文",
+    patterns: [
+      /paulgraham/i,
+      /chadnauseam/i,
+      /schneier/i,
+      /johndcook/i,
+      /pluralistic/i,
+      /idiallo/i,
+      /terriblesoftware/i,
+      /utcc\.utoronto/i,
+      /dfarq/i,
+      /wait but why/i,
+      /james clear/i,
+      /farnam/i,
+      /dan koe/i,
+      /scott young/i,
+    ],
+  },
+  {
+    id: "podcasts",
+    label: "播客",
+    patterns: [
+      /podcast/i,
+      /lex fridman/i,
+      /latent space/i,
+      /80000 hours/i,
+      /80,?000 hours/i,
+    ],
+  },
+];
+
+function classifySource(sourceName) {
+  const src = String(sourceName || "").trim();
+  if (!src) return "tech";
+
+  for (const def of SOURCE_CATEGORY_DEFS) {
+    if (def.id === "all") continue;
+    if ((def.patterns || []).some((pattern) => pattern.test(src))) {
+      return def.id;
+    }
+  }
+
+  return "tech";
+}
+
 // ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
@@ -80,6 +210,7 @@ function renderHtml(briefing) {
 
   const coverage = briefing.coverage || {};
   const createdAt = formatTimestamp(briefing.created_at);
+  const globalBrief = applyUpgradeUnderline(escapeHtml(briefing.global_brief || "本期暂无高信号更新。"));
 
   const domainColumns = DOMAIN_ORDER.map((domain) => {
     const label = DOMAIN_LABELS[domain] || domain;
@@ -90,6 +221,26 @@ function renderHtml(briefing) {
             <h3>${label}</h3>
             ${briefText ? `<p class="domain-brief">${briefText}</p>` : ""}
           </div>`;
+  }).join("");
+
+  const facts = (briefing.highlight_facts || []).map((fact) => {
+    const domain = DOMAIN_LABELS[fact.domain] || "综合";
+    return `
+          <article class="signal-card">
+            <p class="signal-meta">${domain} · ${Number(fact.score || 0).toFixed(2)}</p>
+            <h3>${escapeHtml(stripUpgradeTag(fact.title || "未命名条目"))}</h3>
+            <p>${escapeHtml((fact.summary || "").trim())}</p>
+          </article>`;
+  }).join("");
+
+  const opinions = (briefing.highlight_opinions || []).map((opinion) => {
+    const domain = DOMAIN_LABELS[opinion.domain] || "综合";
+    return `
+          <article class="signal-card">
+            <p class="signal-meta">${domain} · ${Number(opinion.score || 0).toFixed(2)}</p>
+            <h3>${escapeHtml(stripUpgradeTag(opinion.title || "未命名条目"))}</h3>
+            <p>${escapeHtml((opinion.summary || "").trim())}</p>
+          </article>`;
   }).join("");
 
   // Raw feed items — from articles-slim.json, grouped by source
@@ -109,14 +260,32 @@ function renderHtml(briefing) {
   }
   const sourceEntries = [...sourceMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
+  const categorizedEntries = new Map(SOURCE_CATEGORY_DEFS.map((def) => [def.id, []]));
+  for (const entry of sourceEntries) {
+    const [src] = entry;
+    const categoryId = classifySource(src);
+    categorizedEntries.get("all").push(entry);
+    if (!categorizedEntries.has(categoryId)) categorizedEntries.set(categoryId, []);
+    categorizedEntries.get(categoryId).push(entry);
+  }
+
+  const categoryTabs = SOURCE_CATEGORY_DEFS.map((def, index) => {
+    const entries = categorizedEntries.get(def.id) || [];
+    const sourceCount = entries.length;
+    const articleCount = entries.reduce((sum, [, articles]) => sum + articles.length, 0);
+    return `<button class="category-tab${index === 0 ? " active" : ""}" type="button" data-category="${def.id}" title="${def.label} · ${articleCount} 篇文章">${def.label}<span class="badge">${sourceCount}</span></button>`;
+  }).join("\n");
+
   // Sidebar links
   const sidebarLinks = sourceEntries.map(([src, articles], i) => {
     const label = escapeHtml(src);
-    return `<a class="sidebar-link" data-target="src-${i}" href="#src-${i}">${label}<span class="badge">${articles.length}</span></a>`;
+    const categoryId = classifySource(src);
+    return `<a class="sidebar-link" data-target="src-${i}" data-category="${categoryId}" href="#src-${i}">${label}<span class="badge">${articles.length}</span></a>`;
   }).join("\n");
 
   // Grouped feed content
   const feedGroups = sourceEntries.map(([src, articles], i) => {
+    const categoryId = classifySource(src);
     const items = articles.map((a) => {
       const pubDate = formatTimestamp(a.date);
       const summary = clip(a.desc || "", 220);
@@ -124,13 +293,13 @@ function renderHtml(briefing) {
       const titleAttr = a.title_cn ? ` title="${escapeHtml(a.title)}"` : "";
       return `
               <article class="feed-item">
-                <h3><a href="${escapeHtml(a.link)}" target="_blank" rel="noreferrer"${titleAttr}>${displayTitle}</a></h3>
+                <h3><a href="${escapeAttr(a.link)}" target="_blank" rel="noreferrer"${titleAttr}>${displayTitle}</a></h3>
                 <p class="meta">${pubDate}</p>
                 ${summary ? `<p class="summary">${escapeHtml(summary)}</p>` : ""}
               </article>`;
     }).join("");
     return `
-          <div class="source-group" id="src-${i}">
+          <div class="source-group" id="src-${i}" data-category="${categoryId}">
             <h3 class="source-header">${escapeHtml(src)}<span class="badge">${articles.length}</span></h3>
             ${items}
           </div>`;
@@ -237,6 +406,33 @@ function renderHtml(briefing) {
         margin: 0;
         line-height: 1.75;
       }
+      .global-brief {
+        margin: 0;
+        font-size: 1.05rem;
+        line-height: 1.85;
+      }
+      .signal-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+      .signal-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 18px;
+        background: #fffaf2;
+      }
+      .signal-card h3 {
+        margin-bottom: 8px;
+      }
+      .signal-card p {
+        margin: 0;
+      }
+      .signal-meta {
+        margin-bottom: 10px !important;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
 
       /* Feed layout */
       .feed-layout {
@@ -244,13 +440,74 @@ function renderHtml(briefing) {
         gap: 20px;
         align-items: flex-start;
       }
+      .feed-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        position: sticky;
+        top: 14px;
+        z-index: 30;
+        margin-bottom: 20px;
+        padding: 14px 16px;
+        border: 1px solid rgba(139, 94, 60, 0.14);
+        border-radius: 20px;
+        background: rgba(255, 250, 242, 0.9);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 12px 30px rgba(71, 54, 35, 0.08);
+      }
+      .feed-toolbar-label {
+        color: var(--muted);
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+      .category-nav {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding-bottom: 2px;
+        -webkit-overflow-scrolling: touch;
+      }
+      .category-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        padding: 8px 14px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fffaf2;
+        color: var(--muted);
+        font: inherit;
+        font-size: 0.88rem;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.2s, color 0.2s, border-color 0.2s;
+      }
+      .category-tab:hover {
+        color: var(--ink);
+        border-color: rgba(139, 94, 60, 0.28);
+      }
+      .category-tab.active {
+        background: #f2e2d1;
+        color: #6a4429;
+        border-color: rgba(139, 94, 60, 0.22);
+        font-weight: 600;
+        box-shadow: 0 8px 18px rgba(139, 94, 60, 0.12);
+      }
       .feed-sidebar {
         width: 160px;
         position: sticky;
-        top: 24px;
+        top: 104px;
         flex-shrink: 0;
-        max-height: none;
-        overflow-y: visible;
+        align-self: flex-start;
+        max-height: calc(100vh - 128px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+        padding-right: 6px;
+        scrollbar-width: thin;
       }
       .sidebar-link {
         display: flex;
@@ -304,6 +561,11 @@ function renderHtml(briefing) {
         border-radius: 16px;
         padding: 16px;
         background: #fffaf2;
+        scroll-margin-top: 112px;
+      }
+      .source-group[hidden],
+      .sidebar-link[hidden] {
+        display: none !important;
       }
       .source-header {
         display: flex;
@@ -324,6 +586,10 @@ function renderHtml(briefing) {
         padding-top: 14px;
         border-top: 1px solid var(--line);
       }
+      .feed-empty {
+        margin: 0;
+        color: var(--muted);
+      }
       a { color: var(--accent); text-decoration: none; }
       a:hover { text-decoration: underline; }
       .upgrade-tag {
@@ -335,6 +601,12 @@ function renderHtml(briefing) {
 
       /* Mobile */
       @media (max-width: 768px) {
+        .feed-toolbar {
+          flex-direction: column;
+          align-items: stretch;
+          top: 8px;
+          padding: 12px 12px 10px;
+        }
         .feed-layout { flex-direction: column; }
         .feed-sidebar {
           position: static;
@@ -367,14 +639,32 @@ function renderHtml(briefing) {
         </div>
       </section>
       <section>
-        <h2>今日速览</h2>
+        <h2>今日最重要几件事</h2>
+        <p class="global-brief">${globalBrief}</p>
+      </section>
+      <section>
+        <h2>分栏简报</h2>
         <div class="domain-grid">
           ${domainColumns}
         </div>
       </section>
       <section>
+        <h2>重要事实</h2>
+        ${facts ? `<div class="signal-grid">${facts}</div>` : "<p>本期暂无内容。</p>"}
+      </section>
+      <section>
+        <h2>关键观点</h2>
+        ${opinions ? `<div class="signal-grid">${opinions}</div>` : "<p>本期暂无内容。</p>"}
+      </section>
+      <section>
         <h2>原始订阅信息流</h2>
         ${sourceEntries.length > 0 ? `
+        <div class="feed-toolbar">
+          <div class="feed-toolbar-label">按主题查看</div>
+          <div class="category-nav" role="tablist" aria-label="信源分类">
+            ${categoryTabs}
+          </div>
+        </div>
         <div class="feed-layout">
           <nav class="feed-sidebar">
             ${sidebarLinks}
@@ -382,44 +672,126 @@ function renderHtml(briefing) {
           <div class="feed-content">
             ${feedGroups}
           </div>
-        </div>` : '<p>暂无文章。</p>'}
+        </div>
+        <p class="feed-empty" hidden>当前分类下暂无信源。</p>` : '<p>暂无文章。</p>'}
       </section>
     </main>
   </body>
   <script>
     (function() {
+      var categoryTabs = document.querySelectorAll('.category-tab');
       var links = document.querySelectorAll('.sidebar-link');
       var groups = document.querySelectorAll('.source-group');
+      var emptyState = document.querySelector('.feed-empty');
       if (!links.length || !groups.length) return;
+
+      var currentCategory = 'all';
+      var observer;
+
+      function visibleLinks() {
+        return Array.from(links).filter(function(link) {
+          return !link.hidden;
+        });
+      }
+
+      function visibleGroups() {
+        return Array.from(groups).filter(function(group) {
+          return !group.hidden;
+        });
+      }
+
+      function resetActiveLink() {
+        links.forEach(function(link) { link.classList.remove('active'); });
+      }
+
+      function setActiveLink(link) {
+        resetActiveLink();
+        if (!link) return;
+        link.classList.add('active');
+        keepActiveLinkVisible(link);
+      }
+
+      function keepActiveLinkVisible(link) {
+        var sidebar = document.querySelector('.feed-sidebar');
+        if (!sidebar || window.innerWidth <= 768) return;
+
+        var sidebarRect = sidebar.getBoundingClientRect();
+        var linkRect = link.getBoundingClientRect();
+        var padding = 8;
+
+        if (linkRect.top < sidebarRect.top) {
+          sidebar.scrollTop -= (sidebarRect.top - linkRect.top) + padding;
+        } else if (linkRect.bottom > sidebarRect.bottom) {
+          sidebar.scrollTop += (linkRect.bottom - sidebarRect.bottom) + padding;
+        }
+      }
+
+      function bindObserver() {
+        if (observer) observer.disconnect();
+        observer = new IntersectionObserver(function(entries) {
+          entries.forEach(function(entry) {
+            if (!entry.isIntersecting || entry.target.hidden) return;
+            var active = document.querySelector('.sidebar-link[data-target="' + entry.target.id + '"]');
+            if (active && !active.hidden) setActiveLink(active);
+          });
+        }, { rootMargin: '-10% 0px -70% 0px' });
+
+        visibleGroups().forEach(function(group) { observer.observe(group); });
+      }
+
+      function applyCategory(category) {
+        currentCategory = category;
+
+        categoryTabs.forEach(function(tab) {
+          tab.classList.toggle('active', tab.getAttribute('data-category') === category);
+        });
+
+        links.forEach(function(link) {
+          var match = category === 'all' || link.getAttribute('data-category') === category;
+          link.hidden = !match;
+        });
+
+        groups.forEach(function(group) {
+          var match = category === 'all' || group.getAttribute('data-category') === category;
+          group.hidden = !match;
+        });
+
+        var firstVisibleLink = visibleLinks()[0];
+        var firstVisibleGroup = visibleGroups()[0];
+
+        if (emptyState) emptyState.hidden = !!firstVisibleGroup;
+        setActiveLink(firstVisibleLink || null);
+        bindObserver();
+
+        if (firstVisibleGroup) {
+          history.replaceState(null, '', '#' + firstVisibleGroup.id);
+        } else {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      }
 
       // Click handler
       links.forEach(function(link) {
         link.addEventListener('click', function(e) {
+          if (this.hidden) return;
           e.preventDefault();
           var id = this.getAttribute('data-target');
           var target = document.getElementById(id);
           if (!target) return;
-          links.forEach(function(l) { l.classList.remove('active'); });
-          this.classList.add('active');
+          setActiveLink(this);
           target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
       });
 
-      // Scroll sync via IntersectionObserver
-      var observer = new IntersectionObserver(function(entries) {
-        entries.forEach(function(entry) {
-          if (entry.isIntersecting) {
-            links.forEach(function(l) { l.classList.remove('active'); });
-            var active = document.querySelector('.sidebar-link[data-target="' + entry.target.id + '"]');
-            if (active) active.classList.add('active');
-          }
+      categoryTabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          var category = this.getAttribute('data-category') || 'all';
+          if (category === currentCategory) return;
+          applyCategory(category);
         });
-      }, { rootMargin: '-10% 0px -70% 0px' });
+      });
 
-      groups.forEach(function(g) { observer.observe(g); });
-
-      // Set first active on load
-      if (links[0]) links[0].classList.add('active');
+      applyCategory('all');
     })();
   </script>
 </html>`;

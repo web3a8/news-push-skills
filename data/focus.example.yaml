@@ -1,31 +1,8 @@
 # News Push Focus Configuration
 # Copy this file to focus.yaml and customize to your preferences.
-# Usage: /news-push-focus <your natural language description>
+# Or use the Web UI at http://127.0.0.1:7789/config to set preferences.
+#
+# Write your preferences in natural language.
+# The AI engine will interpret your preferences when generating briefings.
 
-# Domain attention weights (1-10, 5 = default)
-domains:
-  ai: 9
-  tech: 7
-  security: 5
-  finance: 5
-  science: 5
-  society: 4
-  health: 3
-  entertainment: 3
-  sports: 2
-  auto: 2
-
-# Keywords that boost priority
-keywords_boost:
-  - OpenAI
-  - Anthropic
-  - Claude
-
-# Keywords that lower priority
-keywords_ignore: []
-
-# Additional editorial instruction for AI analysis
-extra_instruction: "Focus on AI news. Tag major product upgrades with 【focus_on】 in domain briefs."
-
-# Your original note (preserved for reference)
-user_note: "I care more about AI news, please highlight major product upgrades"
+preference: "我更关注AI和安全的新闻，如果有产品的大升级，在结论中提示我"
