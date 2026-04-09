@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { getRuntimePaths } from "../lib/runtime-paths.mjs";
+import { loadAndValidateAnalysis } from "../lib/analysis-json.mjs";
 
 const PATHS = getRuntimePaths();
 const DATA = PATHS.dataDir;
@@ -19,7 +20,7 @@ const OUTPUT = PATHS.outputDir;
 const rawJson = readFileSync(resolve(DATA, "articles.json"), "utf-8");
 const SLIM = JSON.parse(readFileSync(resolve(DATA, "articles-slim.json"), "utf-8"));
 const TITLES = readFileSync(resolve(DATA, "articles-titles.txt"), "utf-8").split("\n").filter(Boolean);
-const ANALYSIS = JSON.parse(readFileSync(resolve(DATA, "analysis.json"), "utf-8"));
+const ANALYSIS = loadAndValidateAnalysis(resolve(DATA, "analysis.json"), { persistRepair: true });
 const BRIEFING = JSON.parse(readFileSync(resolve(DATA, "briefing.json"), "utf-8"));
 const MD = readFileSync(resolve(OUTPUT, "latest.md"), "utf-8");
 const HTML = readFileSync(resolve(OUTPUT, "latest.html"), "utf-8");

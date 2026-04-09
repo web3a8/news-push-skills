@@ -12,6 +12,8 @@ data/articles-titles.txt
 data/analysis.json
 data/briefing.json
 data/_write_analysis.mjs
+ui-state.json
+server-state.json
 
 # Workspace runtime output
 .news-push/

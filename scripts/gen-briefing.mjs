@@ -17,6 +17,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { getRuntimePaths } from "../lib/runtime-paths.mjs";
+import { loadAndValidateAnalysis } from "../lib/analysis-json.mjs";
 
 const PATHS = getRuntimePaths();
 const ANALYSIS_PATH = PATHS.analysisPath;
@@ -25,7 +26,7 @@ const BRIEFING_PATH = PATHS.briefingPath;
 
 function main() {
   // Read AI analysis
-  const analysis = JSON.parse(readFileSync(ANALYSIS_PATH, "utf-8"));
+  const analysis = loadAndValidateAnalysis(ANALYSIS_PATH, { persistRepair: true });
 
   // Read slim articles for coverage stats
   let slim = [];

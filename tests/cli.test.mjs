@@ -13,6 +13,11 @@ function runCli(args, options = {}) {
   return execFileSync(NODE, [CLI_BIN, ...args], {
     cwd: PROJECT_ROOT,
     encoding: "utf-8",
+    env: {
+      ...process.env,
+      NEWS_PUSH_DISABLE_BROWSER: "1",
+      ...(options.env || {}),
+    },
     ...options,
   });
 }
@@ -55,24 +60,32 @@ function createFeedUrl() {
   return `data:text/xml;charset=utf-8,${encodeURIComponent(rssXml)}`;
 }
 
-test("default invocation prepares first, then finalizes into workspace runtime output", () => {
+function readJson(pathname) {
+  return JSON.parse(readFileSync(pathname, "utf-8"));
+}
+test("default invocation prepares waiting state, then flips to final report", () => {
   const workspace = createWorkspace();
+  let paths;
 
   try {
     writeRuntimeFeed(workspace, createFeedUrl());
+    const testEnv = { NEWS_PUSH_DISABLE_WORKSPACE_SERVER: "1" };
 
-    const firstRun = runCli(["--workspace", workspace, "--format", "both", "--skip-extras", "--skip-content"]);
+    const firstRun = runCli(["--workspace", workspace, "--format", "both", "--skip-extras", "--skip-content"], { env: testEnv });
     assert.match(firstRun, /欢迎使用 News Push/);
+    assert.match(firstRun, /首次执行本脚本，可能需要您手动确认几次授权。/);
     assert.match(firstRun, /Prepare 阶段完成/);
+    assert.match(firstRun, /工作台: http:\/\/127\.0\.0\.1:/);
     assert.match(firstRun, /版本: v2026\.04\.08/);
 
-    const paths = JSON.parse(runCli(["paths", "--workspace", workspace]));
+    paths = JSON.parse(runCli(["paths", "--workspace", workspace]));
     assert.equal(existsSync(paths.titlesPath), true);
-    assert.equal(existsSync(paths.latestMdPath), false);
-    assert.equal(existsSync(paths.latestHtmlPath), false);
+    assert.equal(existsSync(paths.uiStatePath), true);
+    assert.equal(existsSync(paths.serverStatePath), false);
 
-    const titles = readFileSync(paths.titlesPath, "utf-8").split("\n").filter(Boolean);
-    assert.deepEqual(titles, ["Local Test Headline"]);
+    const waitingState = readJson(paths.uiStatePath);
+    assert.equal(waitingState.phase, "waiting_for_ai");
+    assert.equal(waitingState.articleCount, 1);
 
     writeFileSync(paths.analysisPath, JSON.stringify({
       global_brief: "本地测试摘要",
@@ -88,18 +101,24 @@ test("default invocation prepares first, then finalizes into workspace runtime o
       },
     }, null, 2), "utf-8");
 
-    const secondRun = runCli(["--workspace", workspace, "--format", "both", "--skip-extras", "--skip-content"]);
-    assert.match(secondRun, /欢迎使用 News Push/);
+    const secondRun = runCli(["--workspace", workspace, "--format", "both", "--skip-extras", "--skip-content"], { env: testEnv });
     assert.match(secondRun, /Finalize 阶段完成/);
     assert.match(secondRun, /版本: v2026\.04\.08/);
 
+    const completedState = readJson(paths.uiStatePath);
+    assert.equal(completedState.phase, "completed");
     assert.equal(existsSync(paths.latestMdPath), true);
     assert.equal(existsSync(paths.latestHtmlPath), true);
+    const completedHtml = readFileSync(paths.latestHtmlPath, "utf-8");
+    assert.match(completedHtml, /本地测试标题/);
 
-    const markdown = readFileSync(paths.latestMdPath, "utf-8");
-    const html = readFileSync(paths.latestHtmlPath, "utf-8");
-    assert.match(markdown, /本地测试标题/);
-    assert.match(html, /本地测试标题/);
+    const thirdRun = runCli(["--workspace", workspace, "--format", "both", "--skip-extras", "--skip-content"], { env: testEnv });
+    assert.match(thirdRun, /Prepare 阶段完成/);
+    assert.doesNotMatch(thirdRun, /Finalize 阶段完成/);
+    assert.equal(existsSync(paths.analysisPath), false);
+
+    const restartedState = readJson(paths.uiStatePath);
+    assert.equal(restartedState.phase, "waiting_for_ai");
   } finally {
     rmSync(workspace, { recursive: true, force: true });
   }

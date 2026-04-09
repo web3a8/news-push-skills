@@ -1,9 +1,9 @@
 ---
 name: news-push
-description: Generate a local news briefing from RSS / OPML subscriptions. Use when the user asks to 根据 RSS、订阅源或 OPML 生成新闻简报、新闻早报、每日摘要、本地 Markdown/HTML 报告，管理 RSS 订阅，或运行一个 CLI-first 的本地新闻工作流； prefer this skill for feed-based briefings, not generic web news search.
+description: Generate a local news briefing from RSS / OPML subscriptions. Use when the user asks to 根据 RSS、订阅源或 OPML 生成新闻简报、新闻早报、每日摘要、本地 Markdown/HTML 报告，管理 RSS 订阅，或运行一个带本地工作台的新闻工作流； prefer this skill for feed-based briefings, not generic web news search.
 ---
 
-IRON LAW: Do not introduce or rely on a web server. `news-push` must stay CLI-first and produce local files the user can open directly. Zero external dependencies — all scripts use only Node.js built-in modules.
+IRON LAW: Only use a **local** HTTP workspace bound to `127.0.0.1` when browser interaction is needed. No external web deployment, no remote API backend, and no third-party runtime dependencies — all scripts use only Node.js built-in modules.
 
 # News Push
 
@@ -46,6 +46,12 @@ prepare phase:
   scripts/preprocess-articles.mjs
     ↓
 workspace/.news-push/data/articles-titles.txt
+workspace/.news-push/ui-state.json  (waiting_for_ai)
+    ↓
+cli/main.mjs ensures local workspace server
+  scripts/server.mjs  → http://127.0.0.1:<port>/
+    ↓
+Browser shows raw feed + “AI 正在进行总结和提炼”
     ↓
 Claude reads titles + generates analysis JSON
     ↓
@@ -58,6 +64,10 @@ finalize phase:
   scripts/render-md.mjs / scripts/render-html.mjs
   scripts/send-email.mjs (optional)
   scripts/manage-opml.mjs (feeds subcommands)
+    ↓
+workspace/.news-push/ui-state.json  (completed)
+    ↓
+Browser auto-refreshes into final HTML briefing
 ```
 
 ## File Locations
@@ -71,6 +81,8 @@ finalize phase:
 - `{workspace}/.news-push/output/latest.md` — generated Markdown report
 - `{workspace}/.news-push/output/archive/` — timestamped snapshots
 - `{workspace}/.news-push/.env` — email sending config (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_TO)
+- `{workspace}/.news-push/ui-state.json` — browser workspace state (`waiting_for_ai`, `completed`, `failed`)
+- `{workspace}/.news-push/server-state.json` — local server metadata (pid, port, url)
 
 ## Authorization-Friendly Runtime
 
@@ -79,23 +91,37 @@ To reduce repeated permission prompts, prefer the stable CLI entrypoint instead 
 - Always execute `bin/news-push` from the skill directory
 - Always pass `--workspace "$PWD"` so runtime files stay in the user's current project
 - Prefer calling the same default `news-push` command twice around the AI analysis step, rather than issuing a long chain of shell commands
+- Let `news-push` itself start or reuse the local workspace server; do not manually launch many helper commands unless the user explicitly asks
 - Do **not** write runtime artifacts back into the installed skill directory unless the user explicitly asks for that behavior
 
 ## Workflow
 
-### Default: `/news-push` (Markdown output)
+### Default: `/news-push` (browser workspace + local files)
 
-1. Run `node {baseDir}/bin/news-push --workspace "$PWD" --format md`
-2. If the CLI reports that prepare is complete, read `{workspace}/.news-push/data/articles-titles.txt`
-3. **If `{workspace}/.news-push/data/focus.yaml` exists and has a `preference` field**, read it and apply the user's natural language preferences during analysis (see Focus Integration below)
-4. Generate an **analysis JSON** using your own AI capabilities (see schema below)
-5. Write the analysis JSON to `{workspace}/.news-push/data/analysis.json`
-6. Run the **same command again**: `node {baseDir}/bin/news-push --workspace "$PWD" --format md`
-7. Show the user `{workspace}/.news-push/output/latest.md`
+1. Run `node {baseDir}/bin/news-push --workspace "$PWD"`
+2. Let the CLI finish prepare, then open or reuse the local browser workspace at `http://127.0.0.1:<port>/`
+3. The browser page should now show the raw feed plus a status banner such as “AI 正在进行总结和提炼”
+4. Read `{workspace}/.news-push/data/articles-titles.txt`
+5. **If `{workspace}/.news-push/data/focus.yaml` exists and has a `preference` field**, read it and apply the user's natural language preferences during analysis (see Focus Integration below)
+6. Generate an **analysis object** using your own AI capabilities (see schema below)
+7. Prefer writing that object through `node {baseDir}/scripts/write-analysis.mjs --workspace "$PWD" --from-module {workspace}/.news-push/data/analysis-source.mjs`
+8. This helper must serialize with `JSON.stringify` and validate before writing `{workspace}/.news-push/data/analysis.json`; do **not** hand-write a raw JSON file if you can avoid it
+9. Run the **same command again**: `node {baseDir}/bin/news-push --workspace "$PWD"`
+10. The browser workspace will auto-refresh into the final HTML report; also mention the generated local file paths to the user
+
+Important freshness rule:
+- Once a run has completed, the next `/news-push` invocation must start a **new** prepare phase.
+- Do **not** reuse a previous run's `analysis.json` just because it still exists on disk.
+- The only time the same command should finalize is when the current workspace state is explicitly waiting for AI analysis from the **current** prepare phase.
+
+Important stability rule:
+- Prefer authoring analysis as a JS object module such as `{workspace}/.news-push/data/analysis-source.mjs`
+- Then call `scripts/write-analysis.mjs` so the final file is always produced by `JSON.stringify`
+- If validation fails, fix the source object/module and rerun the writer; do not manually patch the broken JSON text blindly
 
 ### HTML output
 
-Same flow, but use `node {baseDir}/bin/news-push html --workspace "$PWD"`. After analysis is written, run the same command again and show `{workspace}/.news-push/output/latest.html`.
+Same flow, but use `node {baseDir}/bin/news-push html --workspace "$PWD"`. The browser workspace still opens after prepare and refreshes after finalize; the final local artifact is `{workspace}/.news-push/output/latest.html`.
 
 ### Email output (auto-send)
 
@@ -108,6 +134,12 @@ If `.env` does not exist or lacks required variables, skip silently (no error, n
 ### Both formats
 
 Use `node {baseDir}/bin/news-push both --workspace "$PWD"` before and after the analysis step.
+
+### Local workspace server
+
+- Manual start: `node {baseDir}/bin/news-push serve --workspace "$PWD"`
+- Config page: `node {baseDir}/bin/news-push serve --workspace "$PWD" --page /config`
+- Keep the server local-only on `127.0.0.1`
 
 ### Manage subscriptions
 
@@ -167,7 +199,7 @@ Rules:
 
 ### Focus Integration
 
-If `{baseDir}/data/focus.yaml` exists and has a non-empty `preference` field, read it before generating analysis. The preference is a **natural language string** — interpret it holistically to decide which articles to prioritize, deprioritize, or highlight.
+If `{workspace}/.news-push/data/focus.yaml` exists and has a non-empty `preference` field, read it before generating analysis. The preference is a **natural language string** — interpret it holistically to decide which articles to prioritize, deprioritize, or highlight.
 
 Apply these rules:
 
@@ -214,12 +246,13 @@ When a profile is active, the runtime workspace writes `{workspace}/.news-push/d
 - Keep generated artifacts local and directly openable
 - Facts stay conservative and source-attributed
 - Keep the raw feed visible in time order
-- No web server, no Flask, no live routes
+- Only bind the workspace server to `127.0.0.1`
+- Do not introduce any remote backend, hosted API, or external web deployment
 
 ## Anti-Patterns
 
 - Calling external AI APIs (you ARE the AI)
-- Reintroducing any web server dependency
+- Exposing the local workspace server beyond localhost
 - Asking the user to type long flag-heavy commands
 - Hiding the raw feed behind summaries only
 - Writing output only to stdout without saving a durable file
