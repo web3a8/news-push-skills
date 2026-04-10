@@ -12,14 +12,20 @@ import { createServer } from "node:http";
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { resolve, extname } from "node:path";
 import { exec } from "node:child_process";
-import { ensureRuntimeWorkspace } from "../lib/runtime-paths.mjs";
+import { ensureRuntimeWorkspace, readCurrentJob, resolveJobPaths } from "../lib/runtime-paths.mjs";
 import { readUiState } from "../lib/ui-state.mjs";
+import { NEWS_PUSH_VERSION } from "../lib/version.mjs";
 
 const PATHS = ensureRuntimeWorkspace();
 const OPML_PATH = PATHS.feedsPath;
 const OUTPUT_DIR = PATHS.outputDir;
 const FOCUS_PATH = PATHS.focusPath;
 const DEFAULT_PORT = 7789;
+
+if (PATHS.runtimeRoot === PATHS.packageRoot && process.env.NEWS_PUSH_ALLOW_PACKAGE_ROOT !== "1") {
+  console.error("请通过 news-push serve --workspace \"$PWD\" 或 bin/news-push --workspace \"$PWD\" 启动本地工作台，不要直接运行 scripts/server.mjs。");
+  process.exit(1);
+}
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -132,8 +138,10 @@ function formatDisplayTime(value) {
   }).format(date);
 }
 
-function readPreviewArticles(limit = 120) {
-  const sourcePath = existsSync(PATHS.slimArticlesPath) ? PATHS.slimArticlesPath : PATHS.articlesPath;
+function readPreviewArticles(paths = PATHS, limit = 120) {
+  const slimPath = paths.jobSlimArticlesPath || paths.slimArticlesPath;
+  const articlesPath = paths.jobArticlesPath || paths.articlesPath;
+  const sourcePath = existsSync(slimPath) ? slimPath : articlesPath;
   const raw = readJson(sourcePath, []);
   const articles = Array.isArray(raw) ? raw : [];
 
@@ -177,6 +185,8 @@ function writeServerState(port) {
     port,
     url: `http://127.0.0.1:${port}/`,
     runtimeRoot: PATHS.runtimeRoot,
+    serverVersion: NEWS_PUSH_VERSION,
+    supportsJobRoutes: true,
     startedAt: new Date().toISOString(),
   };
   writeFileSync(PATHS.serverStatePath, JSON.stringify(state, null, 2), "utf-8");
@@ -193,12 +203,24 @@ function clearServerState() {
   }
 }
 
-function readDashboardState() {
-  return readUiState(PATHS);
+function currentJobId() {
+  return readCurrentJob(PATHS) || "";
 }
 
-function shouldServeFinalReport(state) {
-  return (state.phase === "completed" || state.phase === "idle") && existsSync(PATHS.latestHtmlPath);
+function getJobPaths(jobId) {
+  return resolveJobPaths(PATHS, jobId);
+}
+
+function readDashboardState(paths = PATHS) {
+  return readUiState({
+    uiStatePath: paths.jobUiStatePath || paths.uiStatePath,
+    latestHtmlPath: paths.jobLatestHtmlPath || paths.latestHtmlPath,
+  });
+}
+
+function shouldServeFinalReport(state, paths = PATHS) {
+  const htmlPath = paths.jobLatestHtmlPath || paths.latestHtmlPath;
+  return (state.phase === "completed" || state.phase === "idle") && existsSync(htmlPath);
 }
 
 // ---------------------------------------------------------------------------
@@ -312,9 +334,12 @@ async function testFeed(url) {
 // Dynamic HTML
 // ---------------------------------------------------------------------------
 
-function pendingPageHtml() {
-  const state = readDashboardState();
-  const preview = readPreviewArticles();
+function pendingPageHtml(paths, jobId) {
+  const state = readDashboardState(paths);
+  const preview = readPreviewArticles(paths);
+  const jobReportHref = jobId ? `/jobs/${encodeURIComponent(jobId)}/report` : "/report";
+  const stateApiUrl = jobId ? `/api/jobs/${encodeURIComponent(jobId)}/state` : "/api/state";
+  const reloadUrl = jobId ? `/jobs/${encodeURIComponent(jobId)}/report?ts=${Date.now()}` : `/?ts=${Date.now()}`;
   const phaseLabels = {
     preparing: "正在整理原始信息流",
     waiting_for_ai: "AI 正在进行总结和提炼",
@@ -617,7 +642,7 @@ function pendingPageHtml() {
         </div>
         <div class="hero-actions">
           <a href="/config">管理信源</a>
-          ${existsSync(PATHS.latestHtmlPath) ? '<a href="/report" target="_blank" rel="noreferrer">上一份简报</a>' : ""}
+          ${existsSync(paths.jobLatestHtmlPath || paths.latestHtmlPath) ? `<a href="${jobReportHref}" target="_blank" rel="noreferrer">上一份简报</a>` : ""}
         </div>
       </section>
 
@@ -702,12 +727,12 @@ function pendingPageHtml() {
 
       async function pollState() {
         try {
-          const resp = await fetch("/api/state", { cache: "no-store" });
+          const resp = await fetch("${stateApiUrl}", { cache: "no-store" });
           const data = await resp.json();
           applyState(data);
 
           if (data.phase === "completed" && data.hasLatestHtml) {
-            window.location.reload();
+            window.location.replace("${reloadUrl}");
             return;
           }
         } catch {
@@ -1156,8 +1181,9 @@ function configPageHtml() {
 // Request handler
 // ---------------------------------------------------------------------------
 
-function serveLatestReport(res) {
-  if (!existsSync(PATHS.latestHtmlPath)) {
+function serveLatestReport(res, paths = PATHS) {
+  const htmlPath = paths.jobLatestHtmlPath || paths.latestHtmlPath;
+  if (!existsSync(htmlPath)) {
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("Report not found");
     return;
@@ -1166,12 +1192,15 @@ function serveLatestReport(res) {
     "Content-Type": "text/html; charset=utf-8",
     "Cache-Control": "no-store",
   });
-  res.end(readFileSync(PATHS.latestHtmlPath, "utf-8"));
+  res.end(readFileSync(htmlPath, "utf-8"));
 }
 
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const pathname = url.pathname;
+  const jobPageMatch = pathname.match(/^\/jobs\/([^/]+)\/?$/);
+  const jobReportMatch = pathname.match(/^\/jobs\/([^/]+)\/report$/);
+  const jobStateMatch = pathname.match(/^\/api\/jobs\/([^/]+)\/state$/);
 
   if (pathname === "/favicon.ico") {
     res.writeHead(204);
@@ -1180,9 +1209,13 @@ async function handleRequest(req, res) {
   }
 
   if (pathname === "/" || pathname === "/index.html") {
-    const state = readDashboardState();
-    if (shouldServeFinalReport(state)) {
-      serveLatestReport(res);
+    const activeJobId = currentJobId();
+    if (activeJobId) {
+      res.writeHead(302, {
+        Location: `/jobs/${encodeURIComponent(activeJobId)}`,
+        "Cache-Control": "no-store",
+      });
+      res.end();
       return;
     }
 
@@ -1190,12 +1223,40 @@ async function handleRequest(req, res) {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
     });
-    res.end(pendingPageHtml());
+    res.end(pendingPageHtml(PATHS, ""));
+    return;
+  }
+
+  if (jobPageMatch) {
+    const jobId = decodeURIComponent(jobPageMatch[1]);
+    const jobPaths = getJobPaths(jobId);
+    const state = readDashboardState(jobPaths);
+    if (shouldServeFinalReport(state, jobPaths)) {
+      serveLatestReport(res, jobPaths);
+      return;
+    }
+
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
+    res.end(pendingPageHtml(jobPaths, jobId));
+    return;
+  }
+
+  if (jobReportMatch) {
+    const jobId = decodeURIComponent(jobReportMatch[1]);
+    serveLatestReport(res, getJobPaths(jobId));
     return;
   }
 
   if (pathname === "/report") {
-    serveLatestReport(res);
+    const activeJobId = currentJobId();
+    if (activeJobId) {
+      serveLatestReport(res, getJobPaths(activeJobId));
+      return;
+    }
+    serveLatestReport(res, PATHS);
     return;
   }
 
@@ -1208,8 +1269,28 @@ async function handleRequest(req, res) {
     return;
   }
 
+  if (pathname === "/api/health" && req.method === "GET") {
+    const activeJobId = currentJobId();
+    jsonResponse(res, {
+      ok: true,
+      pid: process.pid,
+      runtimeRoot: PATHS.runtimeRoot,
+      serverVersion: NEWS_PUSH_VERSION,
+      supportsJobRoutes: true,
+      activeJobId,
+    });
+    return;
+  }
+
+  if (jobStateMatch && req.method === "GET") {
+    const jobId = decodeURIComponent(jobStateMatch[1]);
+    jsonResponse(res, readDashboardState(getJobPaths(jobId)));
+    return;
+  }
+
   if (pathname === "/api/state" && req.method === "GET") {
-    jsonResponse(res, readDashboardState());
+    const activeJobId = currentJobId();
+    jsonResponse(res, activeJobId ? readDashboardState(getJobPaths(activeJobId)) : readDashboardState(PATHS));
     return;
   }
 

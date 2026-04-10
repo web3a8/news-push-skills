@@ -1,284 +1,180 @@
 # News Push
 
-> Claude Code Skill — 将 RSS 订阅源转化为每日本地新闻简报，零外部依赖。
+把 RSS 订阅源变成一份本地新闻简报的 Claude Code skill。
 
-## 功能特性
+它会从内置的160+个新闻源抓取内容，然后在浏览器中展示给你；
 
-- **每日简报** — 自动抓取 RSS 订阅源，AI 生成中文摘要，按领域分类呈现
-- **动态领域分类** — AI 根据当日内容自动归类（AI、科技、金融、社会等），不固定分类
-- **重要事实 & 关键观点** — 区分事实与观点，附来源标注和重要性评分
-- **英文标题翻译** — 自动将英文文章标题翻译为中文，方便快速扫描
-- **双格式输出** — Markdown + 精美 HTML，本地直接查看
-- **Web UI** — 内置本地 HTTP 服务，浏览器查看报告 + 管理订阅源
-- **按来源分组** — 原始信息流按来源分组，侧边栏快速导航
-- **个性化关注** — 用自然语言设定关注重点，AI 自动调整摘要权重，重点内容带下划线标记
-- **订阅管理** — Web 界面或命令行添加、删除、测试 RSS 订阅源
-- **零依赖** — 仅使用 Node.js 内置模块，无需安装任何 npm 包
+同时，AI 的总结和提炼也在进行，完成后页面会自动刷新。
 
-## 信息源总览
+使用很简单，只需要记住 `/news-push` 就够了。
 
-当前项目共接入 **165 个信息源**，其中 **160 个 RSS / Atom 订阅源** 来自 [feeds.opml](./feeds.opml)，另有 **5 个非 RSS 补充源** 由 [sync-extras.mjs](./scripts/sync-extras.mjs) 动态抓取。
+## 给人看的
 
-| 信息源层 | 数量 | 配置位置 | 覆盖范围 |
-|---|---:|---|---|
-| RSS / Atom 订阅 | 160 | `feeds.opml` | 官方博客、科技媒体、AI / 论文、安全资讯、中文站点、社区与独立博客 |
-| 非 RSS 补充源 | 5 | `scripts/sync-extras.mjs` | 热榜、热门开源项目、论文日榜、财经快讯、社区热点 |
-| 合计 | 165 | 混合采集 | 同时覆盖稳定订阅流与当日高热信号 |
+### 这东西能干嘛
 
-### 非 RSS 补充源
+- 抓取 RSS 订阅源
+- 按照原始信息流展示出来，不要挨个去别的网站看新闻了，一站式服务
+- AI 再把内容整理成中文简报，分重点、事实、观点
+- 同时产出 Markdown 和 HTML
+- 可以在本地页面里管理订阅源和关注偏好
 
-| 来源 | 类型 | 抓取地址 | 说明 |
-|---|---|---|---|
-| 微博热搜 | 热榜 | `https://weibo.com/ajax/side/hotSearch` | 补充中文舆情与社会热点 |
-| GitHub Trending | 热门项目 | `https://github.com/trending` | 补充当日高热仓库与开发工具动态 |
-| HuggingFace Papers | 论文日榜 | `https://huggingface.co/api/daily_papers` | 补充 AI 论文、摘要与热度信号 |
-| 华尔街见闻 | 财经快讯 | `https://api-one.wallstcn.com/apiv1/content/information-flow?...` | 补充中文金融与宏观市场动态 |
-| V2EX 热门 | 社区热点 | `https://www.v2ex.com/api/topics/hot.json` | 补充技术社区热门讨论 |
+### 它的优点
 
-<details>
-<summary>查看全部 160 个 RSS / Atom 订阅源</summary>
+- 上手轻，默认就用 `/news-push`
+- 本地优先，数据和报告都在你自己电脑上
+- 不会复用上一轮旧新闻，每次都是新抓取、新分析
+- 页面不是傻等，先看原始流，再等 AI 补结果
+- 不用装一堆依赖，Node.js 就能跑
 
-| # | 来源 | 类型 | 地址 |
-|---:|---|---|---|
-| 001 | A List Apart | RSS/Atom | `https://alistapart.com/main/feed/` |
-| 002 | AWS Blog | RSS/Atom | `https://aws.amazon.com/blogs/aws/feed/` |
-| 003 | Ars Technica | RSS/Atom | `https://feeds.arstechnica.com/arstechnica/index` |
-| 004 | ByteByteGo | RSS/Atom | `https://blog.bytebytego.com/feed` |
-| 005 | CSS-Tricks | RSS/Atom | `https://css-tricks.com/feed/` |
-| 006 | Chrome Developer Blog | RSS/Atom | `https://developer.chrome.com/blog/feed.xml` |
-| 007 | Cloudflare Blog | RSS/Atom | `https://blog.cloudflare.com/rss/` |
-| 008 | Codrops | RSS/Atom | `https://tympanus.net/codrops/feed/` |
-| 009 | Dev.to | RSS/Atom | `https://dev.to/feed` |
-| 010 | Fluent Reader Releases | RSS/Atom | `https://github.com/yang991178/fluent-reader/releases.atom` |
-| 011 | FreeBuf | RSS/Atom | `https://www.freebuf.com/feed` |
-| 012 | FreshRSS Releases | RSS/Atom | `https://github.com/FreshRSS/FreshRSS/releases.atom` |
-| 013 | GitHub Blog | RSS/Atom | `https://github.blog/feed/` |
-| 014 | Go Blog | RSS/Atom | `https://go.dev/blog/feed.atom` |
-| 015 | Golang Weekly | RSS/Atom | `https://golangweekly.com/rss/` |
-| 016 | Google AI Blog | RSS/Atom | `https://blog.google/technology/ai/rss/` |
-| 017 | Google DeepMind | RSS/Atom | `https://deepmind.google/blog/rss.xml` |
-| 018 | Hacker News AI | RSS/Atom | `https://hnrss.org/newest?q=AI` |
-| 019 | Hacker News Ask | RSS/Atom | `https://hnrss.org/ask` |
-| 020 | Hacker News LLM | RSS/Atom | `https://hnrss.org/newest?q=LLM` |
-| 021 | Hacker News OpenClaw | RSS/Atom | `https://hnrss.org/newest?q=OpenClaw` |
-| 022 | Hacker News Show | RSS/Atom | `https://hnrss.org/show` |
-| 023 | Hacker News 最佳 | RSS/Atom | `https://hnrss.org/best` |
-| 024 | Hacker News 首页 | RSS/Atom | `https://hnrss.org/frontpage` |
-| 025 | Hugging Face 博客 | RSS/Atom | `https://huggingface.co/blog/feed.xml` |
-| 026 | IT之家 | RSS/Atom | `https://www.ithome.com/rss/` |
-| 027 | JavaScript Weekly | RSS/Atom | `https://javascriptweekly.com/rss/` |
-| 028 | Kotlin Blog | RSS/Atom | `https://blog.jetbrains.com/kotlin/feed/` |
-| 029 | Krebs on Security | RSS/Atom | `https://krebsonsecurity.com/feed/` |
-| 030 | LinuxDo 最新话题 | RSS/Atom | `https://linux.do/latest.rss` |
-| 031 | LinuxDo 热门话题 | RSS/Atom | `https://linux.do/top.rss` |
-| 032 | MIT Technology Review | RSS/Atom | `https://www.technologyreview.com/feed/` |
-| 033 | Meta Engineering | RSS/Atom | `https://engineering.fb.com/feed/` |
-| 034 | Mozilla Hacks | RSS/Atom | `https://hacks.mozilla.org/feed/` |
-| 035 | Nature | RSS/Atom | `https://www.nature.com/nature.rss` |
-| 036 | NetNewsWire Releases | RSS/Atom | `https://github.com/Ranchero-Software/NetNewsWire/releases.atom` |
-| 037 | Node.js Blog | RSS/Atom | `https://nodejs.org/en/feed/blog.xml` |
-| 038 | OpenAI 博客 | RSS/Atom | `https://openai.com/news/rss.xml` |
-| 039 | OpenClaw Commits | RSS/Atom | `https://github.com/openclaw/openclaw/commits/main.atom` |
-| 040 | OpenClaw Releases | RSS/Atom | `https://github.com/openclaw/openclaw/releases.atom` |
-| 041 | Product Hunt | RSS/Atom | `https://www.producthunt.com/feed` |
-| 042 | Python Blog | RSS/Atom | `https://blog.python.org/feeds/posts/default` |
-| 043 | RSSHub Radar Releases | RSS/Atom | `https://github.com/DIYgod/RSSHub-Radar/releases.atom` |
-| 044 | React Blog | RSS/Atom | `https://react.dev/rss.xml` |
-| 045 | Rust Blog | RSS/Atom | `https://blog.rust-lang.org/feed.xml` |
-| 046 | Schneier on Security | RSS/Atom | `https://www.schneier.com/feed/` |
-| 047 | Simon Willison's Blog | RSS/Atom | `https://simonwillison.net/atom/everything/` |
-| 048 | Smashing Magazine | RSS/Atom | `https://www.smashingmagazine.com/feed/` |
-| 049 | Spotify Engineering | RSS/Atom | `https://engineering.atspotify.com/feed/` |
-| 050 | Stripe Blog | RSS/Atom | `https://stripe.com/blog/feed.rss` |
-| 051 | Swift Blog | RSS/Atom | `https://www.swift.org/atom.xml` |
-| 052 | Tailwind CSS Blog | RSS/Atom | `https://tailwindcss.com/feeds/feed.xml` |
-| 053 | TechCrunch | RSS/Atom | `https://techcrunch.com/feed/` |
-| 054 | The Hacker News | RSS/Atom | `https://feeds.feedburner.com/TheHackersNews` |
-| 055 | The Verge | RSS/Atom | `https://www.theverge.com/rss/index.xml` |
-| 056 | This Week in Rust | RSS/Atom | `https://this-week-in-rust.org/atom.xml` |
-| 057 | TypeScript Blog | RSS/Atom | `https://devblogs.microsoft.com/typescript/feed/` |
-| 058 | V2EX 技术 | RSS/Atom | `https://www.v2ex.com/feed/tab/tech.xml` |
-| 059 | Vercel Blog | RSS/Atom | `https://vercel.com/atom` |
-| 060 | Vue Blog | RSS/Atom | `https://blog.vuejs.org/feed.rss` |
-| 061 | Wired | RSS/Atom | `https://www.wired.com/feed/rss` |
-| 062 | arXiv AI | RSS/Atom | `https://rss.arxiv.org/rss/cs.AI` |
-| 063 | arXiv NLP | RSS/Atom | `https://rss.arxiv.org/rss/cs.CL` |
-| 064 | arXiv 机器学习 | RSS/Atom | `https://rss.arxiv.org/rss/cs.LG` |
-| 065 | arXiv 计算机视觉 | RSS/Atom | `https://rss.arxiv.org/rss/cs.CV` |
-| 066 | 安全客 | RSS/Atom | `https://api.anquanke.com/data/v1/rss` |
-| 067 | 少数派 | RSS/Atom | `https://sspai.com/feed` |
-| 068 | 效率火箭 | RSS/Atom | `https://rss.aishort.top/?type=xlrocket` |
-| 069 | 爱范儿 | RSS/Atom | `https://rss.aishort.top/?type=AppSolution` |
-| 070 | 阮一峰的网络日志 | RSS/Atom | `https://www.ruanyifeng.com/blog/atom.xml` |
-| 071 | jeffgeerling.com | RSS/Atom | `https://www.jeffgeerling.com/blog.xml` |
-| 072 | seangoedecke.com | RSS/Atom | `https://www.seangoedecke.com/rss.xml` |
-| 073 | daringfireball.net | RSS/Atom | `https://daringfireball.net/feeds/main` |
-| 074 | ericmigi.com | RSS/Atom | `https://ericmigi.com/rss.xml` |
-| 075 | antirez.com | RSS/Atom | `http://antirez.com/rss` |
-| 076 | idiallo.com | RSS/Atom | `https://idiallo.com/feed.rss` |
-| 077 | maurycyz.com | RSS/Atom | `https://maurycyz.com/index.xml` |
-| 078 | pluralistic.net | RSS/Atom | `https://pluralistic.net/feed/` |
-| 079 | shkspr.mobi | RSS/Atom | `https://shkspr.mobi/blog/feed/` |
-| 080 | lcamtuf.substack.com | RSS/Atom | `https://lcamtuf.substack.com/feed` |
-| 081 | mitchellh.com | RSS/Atom | `https://mitchellh.com/feed.xml` |
-| 082 | dynomight.net | RSS/Atom | `https://dynomight.net/feed.xml` |
-| 083 | utcc.utoronto.ca/~cks | RSS/Atom | `https://utcc.utoronto.ca/~cks/space/blog/?atom` |
-| 084 | xeiaso.net | RSS/Atom | `https://xeiaso.net/blog.rss` |
-| 085 | devblogs.microsoft.com/oldnewthing | RSS/Atom | `https://devblogs.microsoft.com/oldnewthing/feed` |
-| 086 | righto.com | RSS/Atom | `https://www.righto.com/feeds/posts/default` |
-| 087 | lucumr.pocoo.org | RSS/Atom | `https://lucumr.pocoo.org/feed.atom` |
-| 088 | skyfall.dev | RSS/Atom | `https://skyfall.dev/rss.xml` |
-| 089 | garymarcus.substack.com | RSS/Atom | `https://garymarcus.substack.com/feed` |
-| 090 | rachelbythebay.com | RSS/Atom | `https://rachelbythebay.com/w/atom.xml` |
-| 091 | overreacted.io | RSS/Atom | `https://overreacted.io/rss.xml` |
-| 092 | timsh.org | RSS/Atom | `https://timsh.org/rss/` |
-| 093 | johndcook.com | RSS/Atom | `https://www.johndcook.com/blog/feed/` |
-| 094 | gilesthomas.com | RSS/Atom | `https://gilesthomas.com/feed/rss.xml` |
-| 095 | matklad.github.io | RSS/Atom | `https://matklad.github.io/feed.xml` |
-| 096 | derekthompson.org | RSS/Atom | `https://www.theatlantic.com/feed/author/derek-thompson/` |
-| 097 | evanhahn.com | RSS/Atom | `https://evanhahn.com/feed.xml` |
-| 098 | terriblesoftware.org | RSS/Atom | `https://terriblesoftware.org/feed/` |
-| 099 | rakhim.exotext.com | RSS/Atom | `https://rakhim.exotext.com/rss.xml` |
-| 100 | joanwestenberg.com | RSS/Atom | `https://joanwestenberg.com/rss` |
-| 101 | xania.org | RSS/Atom | `https://xania.org/feed` |
-| 102 | micahflee.com | RSS/Atom | `https://micahflee.com/feed/` |
-| 103 | nesbitt.io | RSS/Atom | `https://nesbitt.io/feed.xml` |
-| 104 | construction-physics.com | RSS/Atom | `https://www.construction-physics.com/feed` |
-| 105 | tedium.co | RSS/Atom | `https://feed.tedium.co/` |
-| 106 | susam.net | RSS/Atom | `https://susam.net/feed.xml` |
-| 107 | entropicthoughts.com | RSS/Atom | `https://entropicthoughts.com/feed.xml` |
-| 108 | buttondown.com/hillelwayne | RSS/Atom | `https://buttondown.com/hillelwayne/rss` |
-| 109 | dwarkesh.com | RSS/Atom | `https://www.dwarkeshpatel.com/feed` |
-| 110 | borretti.me | RSS/Atom | `https://borretti.me/feed.xml` |
-| 111 | wheresyoured.at | RSS/Atom | `https://www.wheresyoured.at/rss/` |
-| 112 | jayd.ml | RSS/Atom | `https://jayd.ml/feed.xml` |
-| 113 | minimaxir.com | RSS/Atom | `https://minimaxir.com/index.xml` |
-| 114 | geohot.github.io | RSS/Atom | `https://geohot.github.io/blog/feed.xml` |
-| 115 | paulgraham.com | RSS/Atom | `http://www.aaronsw.com/2002/feeds/pgessays.rss` |
-| 116 | filfre.net | RSS/Atom | `https://www.filfre.net/feed/` |
-| 117 | blog.jim-nielsen.com | RSS/Atom | `https://blog.jim-nielsen.com/feed.xml` |
-| 118 | dfarq.homeip.net | RSS/Atom | `https://dfarq.homeip.net/feed/` |
-| 119 | jyn.dev | RSS/Atom | `https://jyn.dev/atom.xml` |
-| 120 | geoffreylitt.com | RSS/Atom | `https://www.geoffreylitt.com/feed.xml` |
-| 121 | downtowndougbrown.com | RSS/Atom | `https://www.downtowndougbrown.com/feed/` |
-| 122 | brutecat.com | RSS/Atom | `https://brutecat.com/rss.xml` |
-| 123 | eli.thegreenplace.net | RSS/Atom | `https://eli.thegreenplace.net/feeds/all.atom.xml` |
-| 124 | abortretry.fail | RSS/Atom | `https://www.abortretry.fail/feed` |
-| 125 | fabiensanglard.net | RSS/Atom | `https://fabiensanglard.net/rss.xml` |
-| 126 | oldvcr.blogspot.com | RSS/Atom | `https://oldvcr.blogspot.com/feeds/posts/default` |
-| 127 | bogdanthegeek.github.io | RSS/Atom | `https://bogdanthegeek.github.io/blog/index.xml` |
-| 128 | hugotunius.se | RSS/Atom | `https://hugotunius.se/feed.xml` |
-| 129 | gwern.net | RSS/Atom | `https://gwern.substack.com/feed` |
-| 130 | berthub.eu | RSS/Atom | `https://berthub.eu/articles/index.xml` |
-| 131 | chadnauseam.com | RSS/Atom | `https://chadnauseam.com/rss.xml` |
-| 132 | simone.org | RSS/Atom | `https://simone.org/feed/` |
-| 133 | it-notes.dragas.net | RSS/Atom | `https://it-notes.dragas.net/feed/` |
-| 134 | beej.us | RSS/Atom | `https://beej.us/blog/rss.xml` |
-| 135 | hey.paris | RSS/Atom | `https://hey.paris/index.xml` |
-| 136 | danielwirtz.com | RSS/Atom | `https://danielwirtz.com/rss.xml` |
-| 137 | matduggan.com | RSS/Atom | `https://matduggan.com/rss/` |
-| 138 | refactoringenglish.com | RSS/Atom | `https://refactoringenglish.com/index.xml` |
-| 139 | worksonmymachine.substack.com | RSS/Atom | `https://worksonmymachine.substack.com/feed` |
-| 140 | philiplaine.com | RSS/Atom | `https://philiplaine.com/index.xml` |
-| 141 | steveblank.com | RSS/Atom | `https://steveblank.com/feed/` |
-| 142 | bernsteinbear.com | RSS/Atom | `https://bernsteinbear.com/feed.xml` |
-| 143 | danieldelaney.net | RSS/Atom | `https://danieldelaney.net/feed` |
-| 144 | troyhunt.com | RSS/Atom | `https://www.troyhunt.com/rss/` |
-| 145 | herman.bearblog.dev | RSS/Atom | `https://herman.bearblog.dev/feed/` |
-| 146 | tomrenner.com | RSS/Atom | `https://tomrenner.com/index.xml` |
-| 147 | blog.pixelmelt.dev | RSS/Atom | `https://blog.pixelmelt.dev/rss/` |
-| 148 | martinalderson.com | RSS/Atom | `https://martinalderson.com/feed.xml` |
-| 149 | danielchasehooper.com | RSS/Atom | `https://danielchasehooper.com/feed.xml` |
-| 150 | chiark.greenend.org.uk/~sgtatham | RSS/Atom | `https://www.chiark.greenend.org.uk/~sgtatham/quasiblog/feed.xml` |
-| 151 | grantslatton.com | RSS/Atom | `https://grantslatton.com/rss.xml` |
-| 152 | experimental-history.com | RSS/Atom | `https://www.experimental-history.com/feed` |
-| 153 | anildash.com | RSS/Atom | `https://anildash.com/feed.xml` |
-| 154 | aresluna.org | RSS/Atom | `https://aresluna.org/main.rss` |
-| 155 | michael.stapelberg.ch | RSS/Atom | `https://michael.stapelberg.ch/feed.xml` |
-| 156 | miguelgrinberg.com | RSS/Atom | `https://blog.miguelgrinberg.com/feed` |
-| 157 | keygen.sh | RSS/Atom | `https://keygen.sh/blog/feed.xml` |
-| 158 | mjg59.dreamwidth.org | RSS/Atom | `https://mjg59.dreamwidth.org/data/rss` |
-| 159 | computer.rip | RSS/Atom | `https://computer.rip/rss.xml` |
-| 160 | tedunangst.com | RSS/Atom | `https://www.tedunangst.com/flak/rss` |
+### 最常用的用法
 
-</details>
+在 Claude Code 里直接输入：
 
-## 前置条件
+```text
+/news-push
+```
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI 已安装并登录
-- Node.js 18+
+如果你更习惯命令行，也可以这样：
 
-## 安装
+```bash
+~/.claude/skills/news-push/bin/news-push --workspace "$PWD"
+```
 
-将本项目克隆到 Claude Code 的 skills 目录下：
+第一次运行会先抓新闻，并打开本地页面。  
+AI 分析写好后，再执行同一个命令一次，就会生成最终简报。
+
+常见输出在这里：
+
+```text
+./.news-push/output/latest.md
+./.news-push/output/latest.html
+```
+
+### 安装，尽量简单来
 
 ```bash
 mkdir -p ~/.claude/skills
 git clone git@github.com:web3a8/news-push-skills.git ~/.claude/skills/news-push
 ```
 
-安装完成后，在 Claude Code 中输入 `/news-push` 即可启动。
+需要的前置条件也很简单：
 
-### 稳定 CLI 入口
+- Claude Code 已安装并登录
+- Node.js 18+
 
-从当前版本开始，推荐通过稳定 CLI 入口执行，而不是手动一条条运行内部脚本：
+### 小提醒
 
-```bash
-~/.claude/skills/news-push/bin/news-push --workspace "$PWD"
-```
+- 第一次跑，Claude Code 可能会让你点几次授权，这是正常的
+- 真正生效的是当前工作区里的 `./.news-push/`，不是 skill 安装目录
+- 如果页面没立刻变成最终简报，通常是还在等 AI 分析，不是卡死了
 
-这样做的好处是：
+## 给 Agent 看的
 
-- 对 Claude Code 来说，命令形态更稳定，更容易复用授权
-- 运行数据会写到当前工作区的 `.news-push/`，不会污染安装目录
-- 你迁移仓库位置后，只要 `~/.claude/skills/news-push` 软链接还在，调用方式就不用变
-- CLI 会自动启动或复用本地工作台，浏览器可以先看原始信息流，再自动刷新到 AI 简报
+### 入口和运行方式
 
-### 本地开发时用软连接注册
-
-如果你已经在别的目录维护这个仓库，推荐用软连接把它注册到 Claude Code 的 skills 目录：
-
-```bash
-ln -s "/path/to/news-push" ~/.claude/skills/news-push
-```
-
-这样你在原目录修改代码后，Claude Code 会直接读取最新版本，不需要重复复制文件。
-
-### 个性化关注配置（可选）
-
-复制示例配置并按需修改：
-
-```bash
-cp data/focus.example.yaml data/focus.yaml
-```
-
-或搭配 [news-push-focus](https://github.com/web3a8/news-push-focus) 技能，用自然语言设定关注点：
-
-```
-/news-push-focus 我更关注AI和安全的新闻，如果有产品大版本升级请提示我
-```
-
-## 使用方法
-
-### 推荐用法：两阶段默认命令
-
-第一次运行：
+- 默认入口是 `bin/news-push`
+- 无子命令时，等价于 `run`
+- 推荐调用方式：
 
 ```bash
 ~/.claude/skills/news-push/bin/news-push --workspace "$PWD"
 ```
 
-这一步会完成抓取、补充源同步、可选 profile 过滤、正文抓取和预处理，并在当前目录生成：
+- `html`、`both`、`serve`、`feeds`、`paths` 都是可选子命令
+- 不要直接把用户引导到内部脚本，尤其不要直接让用户裸跑 `scripts/server.mjs`
+
+### 运行时目录
+
+运行数据统一写到当前工作区：
 
 ```text
-./.news-push/data/articles-titles.txt
-./.news-push/data/analysis.json   # 等待 Claude 安全写入
-./.news-push/ui-state.json        # 浏览器工作台状态
+{workspace}/.news-push/
 ```
 
-同时，CLI 会启动或复用本地工作台，并在浏览器中展示原始信息流，页面顶部会提示“AI 正在进行总结和提炼”。
+关键文件：
 
-推荐写入方式不是直接手改 `analysis.json`，而是先生成一个对象模块，再通过脚本统一序列化：
+| 路径 | 用途 |
+|---|---|
+| `{workspace}/.news-push/feeds.opml` | 当前工作区实际使用的订阅源 |
+| `{workspace}/.news-push/data/articles.json` | 原始抓取结果 |
+| `{workspace}/.news-push/data/articles-titles.txt` | 给 AI 用的标题清单 |
+| `{workspace}/.news-push/data/analysis.json` | AI 分析结果 |
+| `{workspace}/.news-push/data/focus.yaml` | 用户关注偏好 |
+| `{workspace}/.news-push/output/latest.md` | 最终 Markdown |
+| `{workspace}/.news-push/output/latest.html` | 最终 HTML |
+| `{workspace}/.news-push/ui-state.json` | 当前运行状态 |
+| `{workspace}/.news-push/server-state.json` | 本地 server 元数据 |
+| `{workspace}/.news-push/current-job.json` | 当前激活 job |
+| `{workspace}/.news-push/jobs/<jobId>/...` | 每轮任务的快照 |
+
+原则只有一个：
+
+- 代码放 skill 目录
+- 变化数据放 `./.news-push`
+- 不要再把运行产物写回 `~/.claude/skills/news-push`
+
+### 流程模型
+
+这是一个两阶段流程：
+
+1. `prepare`
+   - 抓 RSS
+   - 同步补充源
+   - 可选 profile 过滤
+   - 可选正文抓取
+   - 生成 `articles-titles.txt`
+   - 写 `ui-state.json = waiting_for_ai`
+   - 启动或复用本地工作台
+
+2. `finalize`
+   - 读取 `analysis.json`
+   - 生成 `briefing.json`
+   - 渲染 `latest.md` / `latest.html`
+   - 写 `ui-state.json = completed`
+   - 同步当前 job 快照
+
+重要约束：
+
+- 已完成的旧分析不会被下一轮直接复用
+- 只有当前状态是 `waiting_for_ai` 或 `finalizing` 时，第二次同命令调用才会进入 finalize
+- 一轮任务对应一个 `jobId`
+
+### 本地工作台和 job 路由
+
+本地工作台是 HTTP 服务，不再只依赖根路径 `/` 猜状态。
+
+关键路由：
+
+| 路由 | 作用 |
+|---|---|
+| `/jobs/<jobId>` | 当前 job 的页面入口 |
+| `/jobs/<jobId>/report` | 当前 job 的最终 HTML |
+| `/api/jobs/<jobId>/state` | 当前 job 的状态 |
+| `/api/health` | server 健康检查 |
+| `/config` | 本地配置页 |
+
+现在的复用策略是：
+
+- CLI 先读 `server-state.json`
+- 再请求 `/api/health`
+- 只有下面 3 件事都对得上，才允许复用已有 server：
+  - `runtimeRoot` 一致
+  - `serverVersion` 一致
+  - 如果要打开 `/jobs/...`，必须声明 `supportsJobRoutes: true`
+
+不满足就视为旧进程，直接重启，不再复用。
+
+### JSON 写入约束
+
+不要手搓 JSON 字符串。
+
+推荐做法：
+
+1. 先产出 JS 对象
+2. 用 `scripts/write-analysis.mjs` 统一写入
+3. 必要时用 `scripts/validate-analysis.mjs` 校验或修复
+
+推荐命令：
 
 ```bash
 node ~/.claude/skills/news-push/scripts/write-analysis.mjs \
@@ -286,198 +182,34 @@ node ~/.claude/skills/news-push/scripts/write-analysis.mjs \
   --from-module "$PWD/.news-push/data/analysis-source.mjs"
 ```
 
-如果你只是想检查现有分析文件是否有效，也可以单独运行：
+这样能避免引号、转义和坏 JSON 把整条流程卡住。
 
-```bash
-node ~/.claude/skills/news-push/scripts/validate-analysis.mjs --workspace "$PWD"
-```
+### 信息源结构
 
-Claude 读取 `articles-titles.txt` 生成分析对象并安全写入后，再执行同一个命令一次：
+当前信息源是两层：
 
-```bash
-~/.claude/skills/news-push/bin/news-push --workspace "$PWD"
-```
+| 层级 | 数量 | 位置 |
+|---|---:|---|
+| RSS / Atom 订阅源 | 160 | `feeds.opml` |
+| 非 RSS 补充源 | 5 | `scripts/sync-extras.mjs` |
 
-第二次运行会自动进入 finalize 阶段，输出报告到：
+完整 RSS 列表直接看 [feeds.opml](./feeds.opml)。
 
-```text
-./.news-push/output/latest.md
-./.news-push/output/latest.html
-```
+### 关键脚本
 
-第二次运行完成后，浏览器工作台会自动刷新到最终 HTML 报告。
-
-补充说明：
-
-- 一旦这一轮已经完成，下一次执行 `news-push` 会强制重新抓取和重新分析
-- 不会因为旧的 `./.news-push/data/analysis.json` 还在，就直接复用上一次新闻内容
-- 只有“当前这轮正在等待 AI 写入分析”时，同一个命令才会进入 finalize
-
-### 默认 `/news-push` 行为
-
-```
-/news-push
-```
-
-在 skill 内部，推荐等价执行：
-
-```bash
-~/.claude/skills/news-push/bin/news-push --workspace "$PWD"
-```
-
-默认行为是：
-
-- 首轮抓取后立刻打开本地工作台
-- 工作台先展示原始信息流和 AI 处理中提示
-- 二轮 finalize 后自动刷新成最终 HTML 报告
-- 同时保留本地 Markdown/HTML 产物
-
-### 用自然语言触发
-
-除了直接输入 `/news-push`，也可以用自然语言让 Claude 命中这个 skill。推荐在描述里明确提到 `RSS`、`订阅源`、`OPML`、`新闻简报` 这类关键词，例如：
-
-- `根据我的 RSS 订阅生成今天的新闻简报`
-- `把订阅源整理成一份本地 Markdown 新闻摘要`
-- `生成一份按领域分类的新闻早报`
-- `帮我把这个 RSS 加进 OPML，然后重新生成简报`
-- `用本地订阅源输出一个 HTML 新闻报告`
-
-如果只是说“看看今天有什么新闻”这类泛化请求，更可能走普通联网搜索，而不是这个 skill。
-
-### 生成 HTML 报告
-
-```
-/news-push html
-```
-
-等价 CLI：
-
-```bash
-~/.claude/skills/news-push/bin/news-push html --workspace "$PWD"
-```
-
-生成 HTML 报告到 `./.news-push/output/latest.html`。
-
-### 同时生成两种格式
-
-```
-/news-push both
-```
-
-等价 CLI：
-
-```bash
-~/.claude/skills/news-push/bin/news-push both --workspace "$PWD"
-```
-
-### 本地工作台 / 服务模式
-
-```bash
-# 启动或复用本地工作台（默认端口 7789）
-~/.claude/skills/news-push/bin/news-push serve --workspace "$PWD"
-
-# 直接打开配置页
-~/.claude/skills/news-push/bin/news-push serve --workspace "$PWD" --page /config
-```
-
-- 内容展示页：`http://127.0.0.1:7789/`
-- 配置管理页：`http://127.0.0.1:7789/config`
-
-工作台行为：
-
-- 如果 AI 还没完成，会先显示原始信息流
-- 页面会轮询本地状态，并在 AI 完成后自动刷新
-- 最终报告仍然写入 `./.news-push/output/latest.html`
-- 配置页可直接维护 RSS 信源和偏好
-
-### 管理订阅源
-
-```bash
-# 列出所有订阅源
-~/.claude/skills/news-push/bin/news-push feeds list --workspace "$PWD"
-
-# 添加订阅源
-~/.claude/skills/news-push/bin/news-push feeds add "Feed Name" "https://example.com/feed.xml" --workspace "$PWD"
-
-# 删除订阅源
-~/.claude/skills/news-push/bin/news-push feeds remove "Feed Name" --workspace "$PWD"
-```
-
-也可通过 Web UI 的配置页管理。
-
-## 运行时目录
-
-默认情况下，内置的 `feeds.opml` 只是模板。真正的运行时数据都会写到当前工作区的 `./.news-push/`：
-
-| 路径 | 用途 |
+| 文件 | 作用 |
 |---|---|
-| `./.news-push/feeds.opml` | 当前工作区实际使用的订阅源 |
-| `./.news-push/data/articles.json` | 原始抓取结果 |
-| `./.news-push/data/articles-titles.txt` | 提供给 Claude 的标题清单 |
-| `./.news-push/data/analysis.json` | Claude 生成的分析 JSON |
-| `./.news-push/output/latest.md` | Markdown 报告 |
-| `./.news-push/output/latest.html` | HTML 报告 |
+| [bin/news-push](./bin/news-push) | 稳定 CLI 入口 |
+| [cli/main.mjs](./cli/main.mjs) | 命令分发、prepare/finalize、server 复用 |
+| [scripts/sync-feeds.mjs](./scripts/sync-feeds.mjs) | RSS 抓取 |
+| [scripts/sync-extras.mjs](./scripts/sync-extras.mjs) | 补充热点源 |
+| [scripts/preprocess-articles.mjs](./scripts/preprocess-articles.mjs) | 文章预处理 |
+| [scripts/gen-briefing.mjs](./scripts/gen-briefing.mjs) | 组装 briefing |
+| [scripts/render-md.mjs](./scripts/render-md.mjs) | 渲染 Markdown |
+| [scripts/render-html.mjs](./scripts/render-html.mjs) | 渲染 HTML |
+| [scripts/server.mjs](./scripts/server.mjs) | 本地 HTTP 工作台 |
+| [scripts/manage-opml.mjs](./scripts/manage-opml.mjs) | 订阅源管理 |
 
-## 输出报告结构
-
-| 板块 | 说明 |
-|------|------|
-| 今日速览 | AI 生成的当日全局摘要 + 按领域分类的要点（关注内容带下划线标记） |
-| 重要事实 | 最多 6 条经过验证的重要事件，附来源和评分 |
-| 关键观点 | 最多 6 条值得关注的观点和分析 |
-| 原始订阅信息流 | 按来源分组的全部文章，侧边栏导航 |
-
-## 项目结构
-
-```
-news-push/
-├── SKILL.md                 # Claude Code 技能定义
-├── README.md                # 项目文档
-├── LICENSE                  # MIT 许可证
-├── .gitignore
-├── feeds.opml               # RSS 订阅源（内置 160+ 精选源）
-├── scripts/
-│   ├── sync-feeds.mjs       # RSS 抓取
-│   ├── preprocess-articles.mjs  # 文章预处理 & 去噪
-│   ├── gen-briefing.mjs     # 简报组装
-│   ├── render-html.mjs      # HTML 渲染
-│   ├── render-md.mjs        # Markdown 渲染
-│   ├── server.mjs           # 本地 Web 服务
-│   ├── manage-opml.mjs      # 订阅源命令行管理
-│   └── validate-pipeline.mjs    # 管道验证
-├── data/
-│   ├── focus.example.yaml   # 个性化关注配置示例
-│   └── .gitkeep
-└── output/                  # 生成的报告（已 gitignore）
-    ├── latest.html
-    ├── latest.md
-    └── archive/             # 历史快照
-```
-
-## 配置说明
-
-### feeds.opml
-
-RSS 订阅源使用标准 OPML 格式。安装后自带 10 个示例源，可根据需要增减。推荐通过 Web UI 或命令行工具管理。
-
-### focus.yaml（可选）
-
-个性化关注配置，用自然语言描述你的偏好：
-
-```yaml
-preference: "我更关注AI和安全领域的新闻，如果有OpenAI或Anthropic的产品升级请重点提示我"
-updated_at: "2026-03-31T10:00:00Z"
-```
-
-AI 引擎会在生成简报时自动解读你的偏好，无需手动设置权重或关键词。也可通过本地工作台的配置页直接编辑。
-
-## 技术特点
-
-- **Claude 即 AI 引擎** — 无需调用外部 AI API，由 Claude Code 自身生成分析
-- **零 npm 依赖** — 全部脚本仅使用 Node.js 内置模块
-- **CLI + 本地工作台双入口** — CLI 负责拉起流程，本地 HTTP 工作台负责展示原始流、状态和信源管理
-- **数据本地化** — 所有数据、报告均保存在本地
-
-## 许可证
+## License
 
 MIT

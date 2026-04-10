@@ -92,6 +92,7 @@ To reduce repeated permission prompts, prefer the stable CLI entrypoint instead 
 - Always pass `--workspace "$PWD"` so runtime files stay in the user's current project
 - Prefer calling the same default `news-push` command twice around the AI analysis step, rather than issuing a long chain of shell commands
 - Let `news-push` itself start or reuse the local workspace server; do not manually launch many helper commands unless the user explicitly asks
+- Do **not** call `scripts/server.mjs` directly for normal usage; always let `bin/news-push --workspace "$PWD"` own the runtime root and server lifecycle
 - Do **not** write runtime artifacts back into the installed skill directory unless the user explicitly asks for that behavior
 
 ## Workflow
@@ -101,6 +102,7 @@ To reduce repeated permission prompts, prefer the stable CLI entrypoint instead 
 1. Run `node {baseDir}/bin/news-push --workspace "$PWD"`
 2. Let the CLI finish prepare, then open or reuse the local browser workspace at `http://127.0.0.1:<port>/`
 3. The browser page should now show the raw feed plus a status banner such as “AI 正在进行总结和提炼”
+   If the command says the raw content is ready but the workspace is still recovering, run the **same** `node {baseDir}/bin/news-push --workspace "$PWD"` command again. Do not start AI analysis until the command prints a `工作台:` URL for the current workspace.
 4. Read `{workspace}/.news-push/data/articles-titles.txt`
 5. **If `{workspace}/.news-push/data/focus.yaml` exists and has a `preference` field**, read it and apply the user's natural language preferences during analysis (see Focus Integration below)
 6. Generate an **analysis object** using your own AI capabilities (see schema below)
@@ -113,6 +115,7 @@ Important freshness rule:
 - Once a run has completed, the next `/news-push` invocation must start a **new** prepare phase.
 - Do **not** reuse a previous run's `analysis.json` just because it still exists on disk.
 - The only time the same command should finalize is when the current workspace state is explicitly waiting for AI analysis from the **current** prepare phase.
+- If a prepare phase already completed and the workspace is still `waiting_for_ai`, rerunning the same `/news-push` command should first resume/open the browser workspace instead of refetching the feeds.
 
 Important stability rule:
 - Prefer authoring analysis as a JS object module such as `{workspace}/.news-push/data/analysis-source.mjs`

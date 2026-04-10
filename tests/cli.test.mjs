@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { isServerHealthCompatible } from "../lib/server-health.mjs";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..");
 const CLI_BIN = resolve(PROJECT_ROOT, "bin", "news-push");
@@ -63,6 +64,16 @@ function createFeedUrl() {
 function readJson(pathname) {
   return JSON.parse(readFileSync(pathname, "utf-8"));
 }
+
+async function waitFor(predicate, timeoutMs = 4000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const result = await predicate();
+    if (result) return result;
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+  throw new Error("Timed out waiting for condition");
+}
 test("default invocation prepares waiting state, then flips to final report", () => {
   const workspace = createWorkspace();
   let paths;
@@ -75,17 +86,25 @@ test("default invocation prepares waiting state, then flips to final report", ()
     assert.match(firstRun, /欢迎使用 News Push/);
     assert.match(firstRun, /首次执行本脚本，可能需要您手动确认几次授权。/);
     assert.match(firstRun, /Prepare 阶段完成/);
-    assert.match(firstRun, /工作台: http:\/\/127\.0\.0\.1:/);
+    assert.match(firstRun, /工作台: http:\/\/127\.0\.0\.1:\d+\/jobs\/job_[a-z0-9_]+/);
     assert.match(firstRun, /版本: v2026\.04\.08/);
 
     paths = JSON.parse(runCli(["paths", "--workspace", workspace]));
     assert.equal(existsSync(paths.titlesPath), true);
     assert.equal(existsSync(paths.uiStatePath), true);
     assert.equal(existsSync(paths.serverStatePath), false);
+    assert.match(paths.activeJobId, /^job_[a-z0-9_]+$/);
+    assert.equal(existsSync(paths.activeJobUiStatePath), true);
 
     const waitingState = readJson(paths.uiStatePath);
     assert.equal(waitingState.phase, "waiting_for_ai");
     assert.equal(waitingState.articleCount, 1);
+    const waitingJobState = readJson(paths.activeJobUiStatePath);
+    assert.equal(waitingJobState.phase, "waiting_for_ai");
+
+    const resumeRun = runCli(["--workspace", workspace, "--format", "both", "--skip-extras", "--skip-content"], { env: testEnv });
+    assert.doesNotMatch(resumeRun, /Prepare 阶段完成/);
+    assert.match(resumeRun, /当前继续等待 AI 分析，不会重复抓取/);
 
     writeFileSync(paths.analysisPath, JSON.stringify({
       global_brief: "本地测试摘要",
@@ -109,8 +128,11 @@ test("default invocation prepares waiting state, then flips to final report", ()
     assert.equal(completedState.phase, "completed");
     assert.equal(existsSync(paths.latestMdPath), true);
     assert.equal(existsSync(paths.latestHtmlPath), true);
+    assert.equal(existsSync(paths.activeJobLatestHtmlPath), true);
     const completedHtml = readFileSync(paths.latestHtmlPath, "utf-8");
     assert.match(completedHtml, /本地测试标题/);
+    const completedJobHtml = readFileSync(paths.activeJobLatestHtmlPath, "utf-8");
+    assert.match(completedJobHtml, /本地测试标题/);
 
     const thirdRun = runCli(["--workspace", workspace, "--format", "both", "--skip-extras", "--skip-content"], { env: testEnv });
     assert.match(thirdRun, /Prepare 阶段完成/);
@@ -158,4 +180,48 @@ test("paths command remains machine-readable json without banner noise", () => {
   } finally {
     rmSync(workspace, { recursive: true, force: true });
   }
+});
+
+test("direct server script refuses package-root runtime to avoid serving stale skill output", () => {
+  const serverScript = resolve(PROJECT_ROOT, "scripts", "server.mjs");
+  const result = spawnSync(NODE, [serverScript], {
+    cwd: PROJECT_ROOT,
+    encoding: "utf-8",
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /不要直接运行 scripts\/server\.mjs/);
+});
+
+test("server health compatibility rejects stale runtime, stale version, and missing job-route support", () => {
+  const runtime = "/tmp/news-push-runtime";
+  const paths = { runtimeRoot: runtime };
+
+  assert.equal(isServerHealthCompatible(paths, {
+    ok: true,
+    runtimeRoot: runtime,
+    serverVersion: "v2026.04.08",
+    supportsJobRoutes: true,
+  }, "/jobs/job_example"), true);
+
+  assert.equal(isServerHealthCompatible(paths, {
+    ok: true,
+    runtimeRoot: "/tmp/other-runtime",
+    serverVersion: "v2026.04.08",
+    supportsJobRoutes: true,
+  }, "/jobs/job_example"), false);
+
+  assert.equal(isServerHealthCompatible(paths, {
+    ok: true,
+    runtimeRoot: runtime,
+    serverVersion: "v1999.01.01",
+    supportsJobRoutes: true,
+  }, "/jobs/job_example"), false);
+
+  assert.equal(isServerHealthCompatible(paths, {
+    ok: true,
+    runtimeRoot: runtime,
+    serverVersion: "v2026.04.08",
+    supportsJobRoutes: false,
+  }, "/jobs/job_example"), false);
 });

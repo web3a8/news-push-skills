@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { PACKAGE_ROOT } from "../lib/runtime-paths.mjs";
+import { PACKAGE_ROOT, readCurrentJob, resolveJobPaths, writeCurrentJob } from "../lib/runtime-paths.mjs";
+import { isServerHealthCompatible, normalizeBaseUrl } from "../lib/server-health.mjs";
 import { NEWS_PUSH_VERSION } from "../lib/version.mjs";
 import { readUiState, writeUiState } from "../lib/ui-state.mjs";
 
@@ -133,6 +134,8 @@ function getRuntimePaths(workspace) {
     runtimeRoot,
     dataDir,
     outputDir,
+    jobsDir: resolve(runtimeRoot, "jobs"),
+    currentJobPath: resolve(runtimeRoot, "current-job.json"),
     archiveDir: resolve(outputDir, "archive"),
     uiStatePath: resolve(runtimeRoot, "ui-state.json"),
     serverStatePath: resolve(runtimeRoot, "server-state.json"),
@@ -152,6 +155,7 @@ function getRuntimePaths(workspace) {
 function ensureRuntime(paths) {
   mkdirSync(paths.dataDir, { recursive: true });
   mkdirSync(paths.archiveDir, { recursive: true });
+  mkdirSync(paths.jobsDir, { recursive: true });
 
   if (!existsSync(paths.feedsPath)) {
     copyFileSync(resolve(PACKAGE_ROOT, "feeds.opml"), paths.feedsPath);
@@ -182,10 +186,21 @@ function analysisIsFresh(paths) {
   return statSync(paths.analysisPath).mtimeMs >= statSync(paths.titlesPath).mtimeMs;
 }
 
+function hasPreparedWorkspace(paths) {
+  return existsSync(paths.titlesPath) && (existsSync(paths.slimArticlesPath) || existsSync(paths.articlesPath));
+}
+
 function shouldFinalizeCurrentRun(paths) {
   const state = readUiState(paths);
   if (!analysisIsFresh(paths)) return false;
   return state.phase === "waiting_for_ai" || state.phase === "finalizing";
+}
+
+function shouldResumeWaitingForAi(paths) {
+  const state = readUiState(paths);
+  if (analysisIsFresh(paths)) return false;
+  if (!hasPreparedWorkspace(paths)) return false;
+  return state.phase === "waiting_for_ai";
 }
 
 function clearFileIfExists(pathname) {
@@ -195,6 +210,67 @@ function clearFileIfExists(pathname) {
 
 function clearServerStateFile(paths) {
   clearFileIfExists(paths.serverStatePath);
+}
+
+function currentJobId(paths) {
+  return readCurrentJob(paths) || readUiState(paths).jobId || "";
+}
+
+function getJobPaths(paths, jobId = currentJobId(paths)) {
+  return resolveJobPaths(paths, jobId);
+}
+
+function ensureJobRuntime(jobPaths) {
+  if (!jobPaths.jobId) return;
+  mkdirSync(jobPaths.jobDataDir, { recursive: true });
+  mkdirSync(jobPaths.jobArchiveDir, { recursive: true });
+}
+
+function copyIfExists(sourcePath, targetPath) {
+  if (!existsSync(sourcePath)) return;
+  mkdirSync(dirname(targetPath), { recursive: true });
+  copyFileSync(sourcePath, targetPath);
+}
+
+function writeJobState(jobPaths, state) {
+  if (!jobPaths.jobId) return state;
+  ensureJobRuntime(jobPaths);
+  return writeUiState({
+    uiStatePath: jobPaths.jobUiStatePath,
+    latestHtmlPath: jobPaths.jobLatestHtmlPath,
+  }, state);
+}
+
+function writeRunState(paths, patch = {}) {
+  const next = writeUiState(paths, patch);
+  const jobId = next.jobId || currentJobId(paths);
+  if (jobId) {
+    writeJobState(getJobPaths(paths, jobId), next);
+  }
+  return next;
+}
+
+function snapshotPreparedArtifacts(paths, jobId) {
+  const jobPaths = getJobPaths(paths, jobId);
+  ensureJobRuntime(jobPaths);
+  copyIfExists(paths.articlesPath, jobPaths.jobArticlesPath);
+  copyIfExists(paths.filteredArticlesPath, jobPaths.jobFilteredArticlesPath);
+  copyIfExists(paths.slimArticlesPath, jobPaths.jobSlimArticlesPath);
+  copyIfExists(paths.titlesPath, jobPaths.jobTitlesPath);
+  return jobPaths;
+}
+
+function snapshotFinalArtifacts(paths, jobId) {
+  const jobPaths = getJobPaths(paths, jobId);
+  ensureJobRuntime(jobPaths);
+  copyIfExists(paths.briefingPath, jobPaths.jobBriefingPath);
+  copyIfExists(paths.latestMdPath, jobPaths.jobLatestMdPath);
+  copyIfExists(paths.latestHtmlPath, jobPaths.jobLatestHtmlPath);
+  return jobPaths;
+}
+
+function jobPage(jobId) {
+  return jobId ? `/jobs/${encodeURIComponent(jobId)}` : "/";
 }
 
 function invalidatePreviousAnalysis(paths) {
@@ -302,32 +378,34 @@ function readServerState(paths) {
   return state;
 }
 
-async function canReachServer(state, timeoutMs = 1200) {
+async function canReachServer(paths, state, page = "/", timeoutMs = 1200) {
   if (!state?.url) return false;
 
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const probeUrl = new URL("api/state", state.url).toString();
+    const probeUrl = new URL("api/health", normalizeBaseUrl(state.url)).toString();
     const response = await fetch(probeUrl, {
       signal: controller.signal,
       cache: "no-store",
     });
+    const health = response.ok ? await response.json() : null;
     clearTimeout(timer);
-    return response.ok;
+
+    return response.ok && isServerHealthCompatible(paths, health, page);
   } catch {
     return false;
   }
 }
 
-async function loadLiveServerState(paths) {
+async function loadLiveServerState(paths, page = "/") {
   const state = readServerState(paths);
   if (!state) return null;
   if (state.runtimeRoot && state.runtimeRoot !== paths.runtimeRoot) {
     return null;
   }
 
-  if (await canReachServer(state)) {
+  if (await canReachServer(paths, state, page)) {
     return state;
   }
 
@@ -338,16 +416,57 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForServer(paths, timeoutMs = 15000) {
+async function waitForServer(paths, page = "/", timeoutMs = 15000) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    const state = await loadLiveServerState(paths);
+    const state = await loadLiveServerState(paths, page);
     if (state?.url) {
       return state;
     }
     await sleep(100);
   }
   throw new Error("本地工作台启动超时");
+}
+
+async function spawnServerAtPort(paths, port, page = "/", timeoutMs = 5000) {
+  clearServerStateFile(paths);
+
+  const child = spawn(
+    process.execPath,
+    [resolve(SCRIPTS_DIR, "server.mjs"), "--port", String(port), "--no-open"],
+    {
+      env: makeChildEnv(paths),
+      stdio: ["ignore", "ignore", "pipe"],
+      detached: true,
+    },
+  );
+
+  let stderr = "";
+  let exited = false;
+  child.stderr?.on("data", (chunk) => {
+    stderr += chunk.toString("utf-8");
+  });
+  child.on("exit", () => {
+    exited = true;
+  });
+  child.unref();
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const state = await loadLiveServerState(paths, page);
+    if (state?.url) {
+      return state;
+    }
+    if (exited) {
+      break;
+    }
+    await sleep(100);
+  }
+
+  const portBusy = /已被占用|EADDRINUSE/.test(stderr);
+  const error = new Error(portBusy ? `本地工作台端口 ${port} 已被占用` : "本地工作台启动超时");
+  error.code = portBusy ? "NEWS_PUSH_PORT_IN_USE" : "NEWS_PUSH_WORKSPACE_TIMEOUT";
+  throw error;
 }
 
 async function ensureServer(paths, options = {}) {
@@ -370,20 +489,33 @@ async function ensureServer(paths, options = {}) {
     return forcedUrl;
   }
 
-  let state = await loadLiveServerState(paths);
+  let state = await loadLiveServerState(paths, page);
   if (!state) {
     await stopStaleServer(paths, readServerState(paths));
-    const child = spawn(
-      process.execPath,
-      [resolve(SCRIPTS_DIR, "server.mjs"), "--port", String(DEFAULT_SERVER_PORT), "--no-open"],
-      {
-        env: makeChildEnv(paths),
-        stdio: "ignore",
-        detached: true,
-      },
-    );
-    child.unref();
-    state = await waitForServer(paths);
+    const existingState = readServerState(paths);
+    const candidatePorts = [
+      existingState?.port,
+      DEFAULT_SERVER_PORT,
+      DEFAULT_SERVER_PORT + 1,
+      DEFAULT_SERVER_PORT + 2,
+    ].filter((value, index, array) => Number.isInteger(value) && array.indexOf(value) === index);
+
+    let lastError = null;
+    for (const port of candidatePorts) {
+      try {
+        state = await spawnServerAtPort(paths, port, page, 5000);
+        break;
+      } catch (error) {
+        lastError = error;
+        if (error?.code !== "NEWS_PUSH_PORT_IN_USE") {
+          break;
+        }
+      }
+    }
+
+    if (!state) {
+      throw lastError || new Error("本地工作台启动失败");
+    }
   }
 
   const baseUrl = state.url.endsWith("/") ? state.url : `${state.url}/`;
@@ -396,7 +528,7 @@ async function ensureServer(paths, options = {}) {
 
 function updateWaitingState(paths, opts, jobId) {
   const summary = summarizePreparedArticles(paths);
-  return writeUiState(paths, {
+  const state = writeRunState(paths, {
     phase: "waiting_for_ai",
     statusText: "AI 正在进行总结和提炼，请稍候。",
     articleCount: summary.articleCount,
@@ -406,13 +538,16 @@ function updateWaitingState(paths, opts, jobId) {
     jobId,
     lastError: "",
   });
+  snapshotPreparedArtifacts(paths, jobId);
+  return state;
 }
 
 async function preparePipeline(paths, opts, jobId = createJobId()) {
   ensureRuntime(paths);
   invalidatePreviousAnalysis(paths);
+  writeCurrentJob(paths, jobId);
 
-  writeUiState(paths, {
+  writeRunState(paths, {
     phase: "preparing",
     statusText: "正在抓取订阅并整理原始信息流…",
     format: normalizeFormat(opts.format),
@@ -466,7 +601,7 @@ async function finalizePipeline(paths, opts) {
   const shouldRenderMd = format === "md" || format === "both";
   const shouldRenderHtml = format === "html" || format === "both" || opts.dashboard !== false;
 
-  writeUiState(paths, {
+  writeRunState(paths, {
     phase: "finalizing",
     statusText: "AI 已完成，正在生成最终页面…",
     format,
@@ -492,7 +627,7 @@ async function finalizePipeline(paths, opts) {
   }
 
   const summary = summarizePreparedArticles(paths);
-  writeUiState(paths, {
+  const completedState = writeRunState(paths, {
     phase: "completed",
     statusText: "AI 总结已完成。",
     articleCount: summary.articleCount,
@@ -502,6 +637,7 @@ async function finalizePipeline(paths, opts) {
     jobId: currentState.jobId || createJobId(),
     lastError: "",
   });
+  snapshotFinalArtifacts(paths, completedState.jobId);
 
   console.log("");
   console.log("✓ Finalize 阶段完成");
@@ -517,13 +653,43 @@ async function finalizePipeline(paths, opts) {
 
 async function runCommand(paths, opts) {
   if (shouldFinalizeCurrentRun(paths)) {
-    await ensureServer(paths, { open: false, page: "/" });
+    await ensureServer(paths, { open: false, page: jobPage(currentJobId(paths)) });
     await finalizePipeline(paths, { ...opts, dashboard: true });
     return;
   }
 
-  const state = await preparePipeline(paths, opts, createJobId());
-  const workspaceUrl = await ensureServer(paths, { open: !opts.noOpen, page: "/" });
+  if (shouldResumeWaitingForAi(paths)) {
+    const state = readUiState(paths);
+    const workspaceUrl = await ensureServer(paths, { open: !opts.noOpen, page: jobPage(state.jobId || currentJobId(paths)) });
+
+    console.log("");
+    console.log(`工作台: ${workspaceUrl}`);
+    console.log(`提示: 已恢复 ${state.articleCount || 0} 篇原始内容的工作台展示，当前继续等待 AI 分析，不会重复抓取。`);
+    console.log("");
+    console.log("下一步：让 Claude 读取 articles-titles.txt，优先通过 scripts/write-analysis.mjs 安全写入 analysis.json，然后再次执行同一个 run 命令。");
+    return;
+  }
+
+  const jobId = createJobId();
+  const state = await preparePipeline(paths, opts, jobId);
+  let workspaceUrl;
+  try {
+    workspaceUrl = await ensureServer(paths, { open: !opts.noOpen, page: jobPage(jobId) });
+  } catch (error) {
+    writeRunState(paths, {
+      phase: "waiting_for_ai",
+      statusText: "原始信息已准备好，正在等待工作台恢复。",
+      articleCount: state.articleCount,
+      sourceCount: state.sourceCount,
+      format: normalizeFormat(opts.format),
+      profile: opts.profile || "",
+      jobId: state.jobId,
+      lastError: error?.message || String(error),
+    });
+    const wrapped = new Error(`${error?.message || String(error)}\n原始信息已准备好，但工作台尚未成功打开。请直接再次执行同一个 news-push 命令，内部会继续恢复，不会重新抓取。`);
+    wrapped.code = "NEWS_PUSH_WORKSPACE_PENDING";
+    throw wrapped;
+  }
 
   console.log("");
   console.log(`工作台: ${workspaceUrl}`);
@@ -552,11 +718,21 @@ function feedsCommand(paths, args) {
 }
 
 function printPaths(paths) {
-  console.log(JSON.stringify(paths, null, 2));
+  const jobId = currentJobId(paths);
+  const jobPaths = getJobPaths(paths, jobId);
+  console.log(JSON.stringify({
+    ...paths,
+    activeJobId: jobId,
+    activeJobRoot: jobPaths.jobRoot || "",
+    activeJobUiStatePath: jobPaths.jobUiStatePath || "",
+    activeJobLatestHtmlPath: jobPaths.jobLatestHtmlPath || "",
+    activeJobLatestMdPath: jobPaths.jobLatestMdPath || "",
+  }, null, 2));
 }
 
 async function serveCommand(paths, opts) {
-  const url = await ensureServer(paths, { open: !opts.noOpen, page: opts.page || "/" });
+  const page = opts.page === "/" ? jobPage(currentJobId(paths)) : (opts.page || "/");
+  const url = await ensureServer(paths, { open: !opts.noOpen, page });
   console.log(`本地工作台: ${url}`);
 }
 
@@ -612,14 +788,16 @@ async function main() {
     }
   } catch (error) {
     if (command === "run" || command === "prepare" || command === "finalize" || command === "html" || command === "both") {
-      try {
-        writeUiState(paths, {
-          phase: "failed",
-          statusText: "本次运行失败，请返回终端查看错误信息。",
-          lastError: error?.message || String(error),
-        });
-      } catch {
-        // Ignore state write failures during error reporting.
+      if (error?.code !== "NEWS_PUSH_WORKSPACE_PENDING") {
+        try {
+          writeRunState(paths, {
+            phase: "failed",
+            statusText: "本次运行失败，请返回终端查看错误信息。",
+            lastError: error?.message || String(error),
+          });
+        } catch {
+          // Ignore state write failures during error reporting.
+        }
       }
     }
     console.error(error?.stack || String(error));
